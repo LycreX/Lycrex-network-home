@@ -1,4 +1,4 @@
-name: 构建并发布
+name: Build and Release
 
 on:
   push:
@@ -18,12 +18,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust Toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-          override: true
+          targets: x86_64-unknown-linux-musl
 
       - name: Install musl tools
         run: |
@@ -49,16 +46,29 @@ jobs:
         run: |
           mkdir -p release
           cp target/x86_64-unknown-linux-musl/release/lycrex-home release/
-          cp config.toml release/ || echo "Create default config file..." && cargo run --quiet -- --print-default-config > release/config.toml
-          cd release && tar -czf lycrex-home-linux-x86_64.tar.gz lycrex-home config.toml
+          cd release && tar -czf lycrex-home-linux-x86_64.tar.gz lycrex-home
           cd ..
 
       - name: Get version information
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Get commit messages
+        id: get_commits
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # 如果没有之前的标签，获取所有提交
+            COMMITS=$(git log --pretty=format:"* %s (%h)" HEAD)
+          else
+            # 获取从上一个标签到当前标签的所有提交
+            COMMITS=$(git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..HEAD)
+          fi
+          echo "COMMITS<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create release
-        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -68,12 +78,4 @@ jobs:
           files: |
             release/lycrex-home-linux-x86_64.tar.gz
           body: |
-            ## LycreX Home Page ${{ steps.get_version.outputs.VERSION }}
-            
-            ### Release Notes
-            This release is built through an automated build process and is suitable for x86_64 architecture.
-            
-            ### Installation Guide
-            1. Download and extract the `lycrex-home-linux-x86_64.tar.gz` file
-            2. Modify the `config.toml` configuration file
-            3. Run `./lycrex-home` to start the service 
+            ${{ steps.get_commits.outputs.COMMITS }} 
