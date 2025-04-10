@@ -86,11 +86,9 @@ pub fn get_server_config() -> &'static ServerConfig {
 pub fn start_config_watcher() -> notify::Result<()> {
     let config_path = "config.toml";
     
-    // 创建一个新的watcher
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         match res {
             Ok(event) => {
-                // 只处理写入和修改事件
                 if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                     info!("检测到配置文件变更，正在重新加载...");
                     
@@ -123,8 +121,6 @@ pub fn start_config_watcher() -> notify::Result<()> {
     // 开始监听配置文件
     watcher.watch(Path::new(config_path), RecursiveMode::NonRecursive)?;
     
-    // 将watcher保存到一个全局变量中，以防止它被丢弃
-    // (这里使用Arc和Mutex是因为watcher需要在多线程间共享)
     static WATCHER: OnceLock<Arc<Mutex<Box<dyn notify::Watcher + Send>>>> = OnceLock::new();
     WATCHER.set(Arc::new(Mutex::new(Box::new(watcher)))).unwrap_or(());
     
@@ -139,8 +135,6 @@ fn reload_config() -> Result<Config, config::ConfigError> {
         .add_source(config::File::with_name("config"))
         .build()
         .and_then(|settings| settings.try_deserialize::<Config>())?;
-    
-    // 由于CONFIG是OnceLock，我们不能直接替换，但get_status会直接从文件读取
-    // 所以这里返回新配置供监听器使用
+
     Ok(new_config)
 } 

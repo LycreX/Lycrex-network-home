@@ -13,7 +13,6 @@ pub struct ServerConfig {
     pub subtitle: String,
 }
 
-// 将OnceLock<ServerConfig>替换为OnceLock<Mutex<ServerConfig>>，以便可以修改内部值
 static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
 
 #[derive(Serialize, Deserialize)]

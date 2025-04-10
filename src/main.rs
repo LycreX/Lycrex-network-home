@@ -48,7 +48,6 @@ async fn main() {
         .route("/", get(handler))
         .route("/static/*path", get(static_files::serve_static_file))
         .nest("/api", api::api_routes())
-        // 添加 CORS 中间件
         .layer(cors);
 
     let port = get_server_config().port;
