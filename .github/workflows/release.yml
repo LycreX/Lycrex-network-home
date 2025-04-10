@@ -48,9 +48,9 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          cp target/x86_64-unknown-linux-musl/release/hutao-home release/
+          cp target/x86_64-unknown-linux-musl/release/lycrex-home release/
           cp config.toml release/ || echo "Create default config file..." && cargo run --quiet -- --print-default-config > release/config.toml
-          cd release && tar -czf hutao-home-linux-x86_64.tar.gz hutao-home config.toml
+          cd release && tar -czf lycrex-home-linux-x86_64.tar.gz lycrex-home config.toml
           cd ..
 
       - name: Get version information

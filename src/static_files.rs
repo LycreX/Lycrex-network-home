@@ -10,7 +10,6 @@ use axum::{
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/home/static");
 
 pub async fn serve_static_file(Path(path): Path<String>) -> impl IntoResponse {
-    // 移除开头的斜杠
     let path = path.trim_start_matches('/');
     
     // 查找文件
