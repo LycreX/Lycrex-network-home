@@ -1,19 +1,20 @@
 use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, Mutex};
 use crate::config::get_server_config;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerConfig {
-    name: String,
-    status: String,
-    message: String,
-    title: String,
-    subtitle: String,
+    pub name: String,
+    pub status: String,
+    pub message: String,
+    pub title: String,
+    pub subtitle: String,
 }
 
-static SERVER_CONFIG: OnceLock<ServerConfig> = OnceLock::new();
+// 将OnceLock<ServerConfig>替换为OnceLock<Mutex<ServerConfig>>，以便可以修改内部值
+static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
 
 #[derive(Serialize, Deserialize)]
 pub struct StatusResponse {
@@ -47,24 +48,25 @@ pub fn init_server_config() {
         title: config.title.clone(),
         subtitle: config.subtitle.clone(),
     };
-    SERVER_CONFIG.set(server_config).expect("服务器配置已初始化");
+    
+    // 初始化为Mutex包装的ServerConfig
+    SERVER_CONFIG.get_or_init(|| Mutex::new(server_config));
 }
 
 // 更新服务器状态
-pub fn update_server_status(status: String, message: String) {
-    if let Some(config) = SERVER_CONFIG.get() {
-        let new_config = ServerConfig {
-            name: config.name.clone(),
-            status,
-            message,
-            title: config.title.clone(),
-            subtitle: config.subtitle.clone(),
-        };
-        SERVER_CONFIG.set(new_config).expect("无法更新服务器状态");
+pub fn update_server_status(server_config: ServerConfig) {
+    if let Some(mutex) = SERVER_CONFIG.get() {
+        // 获取锁并更新内部值
+        if let Ok(mut config) = mutex.lock() {
+            *config = server_config;
+        }
+    } else {
+        // 如果尚未初始化，则进行初始化
+        SERVER_CONFIG.get_or_init(|| Mutex::new(server_config));
     }
 }
 
-// 修改 get_status 函数，确保每次都获取最新配置
+// 修改 get_status 函数，使用缓存的SERVER_CONFIG而不是每次从文件读取
 pub async fn get_status() -> StatusResponse {
     // 获取系统状态
     let mut sys = System::new_all();
@@ -84,17 +86,35 @@ pub async fn get_status() -> StatusResponse {
     // 获取系统启动时间
     let uptime = sysinfo::System::uptime();
     
-    // 直接从配置模块获取最新配置，而不是使用缓存的 SERVER_CONFIG
-    let config = get_server_config();
-    
-    StatusResponse {
-        server: ServerConfig {
+    // 使用缓存的SERVER_CONFIG
+    let server_config = if let Some(mutex) = SERVER_CONFIG.get() {
+        if let Ok(config) = mutex.lock() {
+            config.clone()
+        } else {
+            // 如果锁定失败，回退到从文件读取
+            let config = get_server_config();
+            ServerConfig {
+                name: config.name.clone(),
+                status: config.status.clone(),
+                message: config.message.clone(),
+                title: config.title.clone(),
+                subtitle: config.subtitle.clone(),
+            }
+        }
+    } else {
+        // 如果SERVER_CONFIG未初始化，直接从文件读取
+        let config = get_server_config();
+        ServerConfig {
             name: config.name.clone(),
             status: config.status.clone(),
             message: config.message.clone(),
             title: config.title.clone(),
             subtitle: config.subtitle.clone(),
-        },
+        }
+    };
+    
+    StatusResponse {
+        server: server_config,
         system: SystemStatus {
             cpu_usage,
             memory_usage: MemoryUsage {

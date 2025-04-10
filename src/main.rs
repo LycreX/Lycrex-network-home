@@ -3,7 +3,7 @@ mod api;
 mod static_files;
 mod config;
 use log::init_log;
-use config::{init_config, get_server_config};
+use config::{init_config, get_server_config, start_config_watcher};
 use api::status::init_server_config;
 
 use rimplog::info;
@@ -31,6 +31,11 @@ async fn main() {
 
     // 初始化服务器配置
     init_server_config();
+    
+    // 启动配置文件监听
+    if let Err(e) = start_config_watcher() {
+        info!("启动配置文件监听失败: {}", e);
+    }
     
     // 配置 CORS
     let cors = CorsLayer::new()

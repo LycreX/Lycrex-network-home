@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, Arc, Mutex};
 use std::fs;
 use std::path::Path;
+use notify::{Watcher, RecursiveMode, Event, EventKind};
+use rimplog::info;
+use crate::api::status::update_server_status;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ServerConfig {
@@ -77,4 +80,67 @@ pub fn get_config() -> &'static Config {
 
 pub fn get_server_config() -> &'static ServerConfig {
     &get_config().server
+}
+
+// 开始监听配置文件变更
+pub fn start_config_watcher() -> notify::Result<()> {
+    let config_path = "config.toml";
+    
+    // 创建一个新的watcher
+    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+        match res {
+            Ok(event) => {
+                // 只处理写入和修改事件
+                if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                    info!("检测到配置文件变更，正在重新加载...");
+                    
+                    // 重新加载配置文件
+                    match reload_config() {
+                        Ok(new_config) => {
+                            // 转换并更新服务器配置
+                            let server_config = crate::api::status::ServerConfig {
+                                name: new_config.server.name.clone(),
+                                status: new_config.server.status.clone(),
+                                message: new_config.server.message.clone(),
+                                title: new_config.server.title.clone(),
+                                subtitle: new_config.server.subtitle.clone(),
+                            };
+                            
+                            // 更新服务器状态
+                            update_server_status(server_config);
+                            info!("已成功更新服务器配置");
+                        },
+                        Err(e) => {
+                            info!("重新加载配置失败: {}", e);
+                        }
+                    }
+                }
+            },
+            Err(e) => info!("监听配置文件错误: {:?}", e),
+        }
+    })?;
+    
+    // 开始监听配置文件
+    watcher.watch(Path::new(config_path), RecursiveMode::NonRecursive)?;
+    
+    // 将watcher保存到一个全局变量中，以防止它被丢弃
+    // (这里使用Arc和Mutex是因为watcher需要在多线程间共享)
+    static WATCHER: OnceLock<Arc<Mutex<Box<dyn notify::Watcher + Send>>>> = OnceLock::new();
+    WATCHER.set(Arc::new(Mutex::new(Box::new(watcher)))).unwrap_or(());
+    
+    info!("配置文件监听已启动");
+    Ok(())
+}
+
+// 重新加载配置文件
+fn reload_config() -> Result<Config, config::ConfigError> {
+    // 解析配置文件
+    let new_config = config::Config::builder()
+        .add_source(config::File::with_name("config"))
+        .build()
+        .and_then(|settings| settings.try_deserialize::<Config>())?;
+    
+    // 由于CONFIG是OnceLock，我们不能直接替换，但get_status会直接从文件读取
+    // 所以这里返回新配置供监听器使用
+    Ok(new_config)
 } 
