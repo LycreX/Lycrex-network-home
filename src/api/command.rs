@@ -169,31 +169,28 @@ pub async fn process_command_with_auth(command: &str, password: Option<&str>, to
                 debug!("没有提供token");
             }
             
-            // 再检查密码是否有效
-            if !authenticated && password.is_some() {
-                let pwd = password.unwrap();
-                debug!("检查密码: '{}'", if pwd.is_empty() { "空" } else { "非空" });
-                if !pwd.is_empty() && pwd == "secure123" {
-                    authenticated = true;
-                    debug!("密码验证通过");
-                } else {
-                    debug!("密码验证失败");
-                }
-            } else if !authenticated {
-                debug!("没有提供密码");
-            }
+            // // 再检查密码是否有效
+            // if !authenticated && password.is_some() {
+            //     let pwd = password.unwrap();
+            //     debug!("检查密码: '{}'", if pwd.is_empty() { "空" } else { "非空" });
+            //     if !pwd.is_empty() && pwd == "secure123" {
+            //         authenticated = true;
+            //         debug!("密码验证通过");
+            //     } else {
+            //         debug!("密码验证失败");
+            //     }
+            // } else if !authenticated {
+            //     debug!("没有提供密码");
+            // }
             
-            // 根据认证结果决定响应
             if authenticated {
-                // 认证成功，执行命令
                 debug!("认证成功，执行命令: '{}'", command);
                 return execute_authenticated_command(&command).await;
             } else {
-                // 认证失败
                 debug!("认证失败，无法执行命令: '{}'", command);
                 return CommandResponse {
                     success: false,
-                    message: "需要认证才能执行此命令，请先使用password命令登录".to_string(),
+                    message: "您无权执行此命令".to_string(),
                     action: None,
                     token_status: None,
                 };
