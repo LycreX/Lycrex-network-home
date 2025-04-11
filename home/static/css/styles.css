@@ -34,6 +34,12 @@ body {
     flex-direction: column;
     align-items: center;
     transform: translateY(-2vh); /* 向上移动10%的视口高度 */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    width: 100%;
 }
 
 .logo {
@@ -43,6 +49,8 @@ body {
     position: relative;
     font-weight: 300; /* 使用Light字重 */
     display: inline-block; /* 添加这一行 */
+    text-align: center;
+    margin: 0 auto;
 }
 
 .subtitle {
@@ -53,6 +61,8 @@ body {
     font-weight: 200; /* 使用ExtraLight字重 */
     display: inline-block; /* 修改为inline-block */
     position: relative; /* 添加这一行 */
+    text-align: center;
+    margin: 1vh auto 0;
 }
 
 @keyframes blink {
@@ -163,4 +173,31 @@ body {
 .server-version:hover {
     background-color: rgba(0, 0, 0, 0.8);
     color: rgba(255, 255, 255, 0.9);
+}
+
+/* 服务器组样式 */
+.server-group-title {
+    color: #fff;
+    font-size: 1.2em;
+    margin: 20px 0 10px 0;
+    padding-left: 10px;
+    border-left: 3px solid #ff9999;
+}
+
+.server-group {
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.server-group p {
+    margin: 5px 0;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.server-group p:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
