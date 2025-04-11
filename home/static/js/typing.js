@@ -27,6 +27,96 @@ document.addEventListener('DOMContentLoaded', () => {
         .typing-container {
             display: inline-block;
         }
+
+        .background-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 25vw;
+            font-weight: 900;
+            color: rgba(200, 200, 200, 0.08);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            user-select: none;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-family: 'Arial Black', Helvetica, sans-serif;
+        }
+        
+        /* 样式1: 倾斜分层效果 */
+        .bg-style-1 {
+            transform: translate(-50%, -50%) rotate(-5deg);
+            text-shadow: 0.03em 0.03em 0 rgba(180, 180, 180, 0.03);
+            animation: float1 8s ease-in-out infinite;
+        }
+        
+        .bg-style-1::before,
+        .bg-style-1::after {
+            content: 'LYCREX';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: -1;
+        }
+        
+        .bg-style-1::before {
+            transform: translateX(-0.05em);
+            color: rgba(220, 220, 220, 0.02);
+        }
+        
+        .bg-style-1::after {
+            transform: translateX(0.05em) translateY(0.05em);
+            color: rgba(180, 180, 180, 0.02);
+        }
+        
+        @keyframes float1 {
+            0%, 100% { transform: translate(-50%, -50%) rotate(-5deg); }
+            50% { transform: translate(-50%, -52%) rotate(-4deg); }
+        }
+        
+        /* 样式2: 垂直堆叠效果 */
+        .bg-style-2 {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            line-height: 0.8;
+            transform: translate(-50%, -50%);
+            font-size: 20vw;
+            text-shadow: 0.02em 0.02em 0.05em rgba(180, 180, 180, 0.04);
+            font-weight: 900;
+            transition: opacity 1.5s ease;
+        }
+        
+        .bg-style-2::before {
+            content: 'LY';
+            display: block;
+            letter-spacing: 0.2em;
+            margin-left: 0.2em;
+            color: rgba(200, 200, 200, 0.09);
+        }
+        
+        .bg-style-2::after {
+            content: 'CREX';
+            display: block;
+            letter-spacing: 0.1em;
+            margin-left: 0.1em;
+            color: rgba(210, 210, 210, 0.07);
+        }
+        
+        /* 样式3: 简约居中效果 */
+        .bg-style-3 {
+            font-size: 28vw;
+            transform: translate(-50%, -50%);
+            color: rgba(200, 200, 200, 0.06);
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            transition: opacity 1.8s ease;
+        }
     `;
     document.head.appendChild(style);
 
@@ -121,6 +211,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const delay = this.getRandomDelay(this.deleteSpeed.min, this.deleteSpeed.max);
                 setTimeout(() => this.typeStep(shouldDelete, callback), delay);
                 
+                // 如果删除完成，显示背景文字
+                if (this.currentIndex === 0 && this.element.id === 'typed-text') {
+                    this.showBackgroundText();
+                }
+                
             } else if (!this.isDeleting && shouldDelete) {
                 // 打字完成，等待后开始删除
                 if (this.waitForEnter) {
@@ -195,6 +290,37 @@ document.addEventListener('DOMContentLoaded', () => {
         resume() {
             this.isPaused = false;
             return this;
+        }
+
+        // 显示背景文字
+        showBackgroundText() {
+            // 检查是否已经有背景文字
+            if (!document.querySelector('.background-text')) {
+                const container = document.querySelector('.typing-section') || document.body;
+                const bgTextElement = document.createElement('div');
+                bgTextElement.className = 'background-text';
+                
+                // 随机选择样式
+                const styles = ['bg-style-1', 'bg-style-2', 'bg-style-3'];
+                const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+                bgTextElement.classList.add(randomStyle);
+                
+                // 根据不同样式设置内容
+                if (randomStyle === 'bg-style-2') {
+                    // 空内容，因为使用了::before和::after
+                    bgTextElement.textContent = '';
+                } else {
+                    // 默认文本内容
+                    bgTextElement.textContent = "LYCREX";
+                }
+                
+                container.appendChild(bgTextElement);
+                
+                // 强制回流并开始动画
+                setTimeout(() => {
+                    bgTextElement.style.opacity = '1';
+                }, 10);
+            }
         }
     }
 
