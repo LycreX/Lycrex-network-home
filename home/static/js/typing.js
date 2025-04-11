@@ -45,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.queue = [];
             this.isWaiting = false;
             this.isPaused = false;
+            this.waitForEnter = options.waitForEnter || false;
+            this.enterCallback = null;
         }
 
         // 获取随机延迟
@@ -121,11 +123,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 
             } else if (!this.isDeleting && shouldDelete) {
                 // 打字完成，等待后开始删除
-                setTimeout(() => {
-                    this.isDeleting = true;
-                    this.typeStep(shouldDelete, callback);
-                }, this.delayBeforeDelete);
-                
+                if (this.waitForEnter) {
+                    // 显示Enter提示
+                    const promptElement = document.createElement('div');
+                    promptElement.className = 'enter-prompt';
+                    promptElement.textContent = '按下Enter继续...';
+                    promptElement.style.fontSize = '12px';
+                    promptElement.style.marginTop = '5px';
+                    promptElement.style.opacity = '0.7';
+                    this.element.parentNode.appendChild(promptElement);
+                    
+                    // 等待Enter按键
+                    this.enterCallback = () => {
+                        this.element.parentNode.removeChild(promptElement);
+                        this.isDeleting = true;
+                        this.typeStep(shouldDelete, callback);
+                    };
+                    
+                    document.addEventListener('keydown', this.handleEnterKey);
+                } else {
+                    setTimeout(() => {
+                        this.isDeleting = true;
+                        this.typeStep(shouldDelete, callback);
+                    }, this.delayBeforeDelete);
+                }
             } else {
                 // 完成当前队列项
                 this.queue.shift();
@@ -137,6 +158,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.isWaiting = false;
                     this.processQueue();
                 }, this.delayAfterWord);
+            }
+        }
+        
+        // 处理Enter按键
+        handleEnterKey = (event) => {
+            if (event.key === 'Enter' && this.enterCallback) {
+                event.preventDefault();
+                const callback = this.enterCallback;
+                this.enterCallback = null;
+                document.removeEventListener('keydown', this.handleEnterKey);
+                callback();
             }
         }
         
@@ -186,13 +218,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // 创建副标题打字机
             const subtitleTyper = new TypeWriter(typedSubtitleElement, {
                 typingSpeed: { min: 60, max: 120 },
-                deleteSpeed: { min: 30, max: 80 }
+                deleteSpeed: { min: 30, max: 80 },
+                waitForEnter: true
             });
             
             // 启动动画序列
             setTimeout(() => {
-                // 添加主标题（永久不删除）
-                titleTyper.addPermanentText(mainText, () => {
+                // 添加主标题（需要删除）
+                titleTyper.addText(mainText, () => {
                     // 主标题完成后，开始副标题
                     subtitleTyper.addText(subtitleText);
                 });
@@ -207,11 +240,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const titleTyper = new TypeWriter(typedTextElement);
             
             // 创建副标题打字机  
-            const subtitleTyper = new TypeWriter(typedSubtitleElement);
+            const subtitleTyper = new TypeWriter(typedSubtitleElement, {
+                waitForEnter: true
+            });
             
             // 启动动画序列
             setTimeout(() => {
-                titleTyper.addPermanentText(mainText, () => {
+                titleTyper.addText(mainText, () => {
                     subtitleTyper.addText(subtitleText);
                 });
             }, 800);
