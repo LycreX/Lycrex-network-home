@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
 use std::sync::{OnceLock, Mutex};
 use crate::config::get_server_config;
+use crate::api::visitor::get_visitor_stats;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerConfig {
@@ -11,6 +12,15 @@ pub struct ServerConfig {
     pub message: String,
     pub title: String,
     pub subtitle: String,
+    pub show_visitor_stats: VisitorStatsConfig,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VisitorStatsConfig {
+    pub enabled: bool,
+    pub show_total_visits: bool,
+    pub show_unique_ips: bool,
+    pub show_personal_visits: bool,
 }
 
 static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
@@ -19,6 +29,7 @@ static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
 pub struct StatusResponse {
     server: ServerConfig,
     system: SystemStatus,
+    visitor_stats: Option<VisitorStats>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,6 +48,12 @@ pub struct MemoryUsage {
     free: u64,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct VisitorStats {
+    total_visits: u64,
+    unique_ips: usize,
+}
+
 // 初始化服务器配置
 pub fn init_server_config() {
     let config = get_server_config();
@@ -46,6 +63,12 @@ pub fn init_server_config() {
         message: config.message.clone(),
         title: config.title.clone(),
         subtitle: config.subtitle.clone(),
+        show_visitor_stats: VisitorStatsConfig {
+            enabled: config.show_visitor_stats.enabled,
+            show_total_visits: config.show_visitor_stats.show_total_visits,
+            show_unique_ips: config.show_visitor_stats.show_unique_ips,
+            show_personal_visits: config.show_visitor_stats.show_personal_visits,
+        },
     };
     
     // 初始化为Mutex包装的ServerConfig
@@ -98,6 +121,12 @@ pub async fn get_status() -> StatusResponse {
                 message: config.message.clone(),
                 title: config.title.clone(),
                 subtitle: config.subtitle.clone(),
+                show_visitor_stats: VisitorStatsConfig {
+                    enabled: config.show_visitor_stats.enabled,
+                    show_total_visits: config.show_visitor_stats.show_total_visits,
+                    show_unique_ips: config.show_visitor_stats.show_unique_ips,
+                    show_personal_visits: config.show_visitor_stats.show_personal_visits,
+                },
             }
         }
     } else {
@@ -109,7 +138,25 @@ pub async fn get_status() -> StatusResponse {
             message: config.message.clone(),
             title: config.title.clone(),
             subtitle: config.subtitle.clone(),
+            show_visitor_stats: VisitorStatsConfig {
+                enabled: config.show_visitor_stats.enabled,
+                show_total_visits: config.show_visitor_stats.show_total_visits,
+                show_unique_ips: config.show_visitor_stats.show_unique_ips,
+                show_personal_visits: config.show_visitor_stats.show_personal_visits,
+            },
         }
+    };
+    
+    // 获取访问者统计
+    let visitor_stats = if get_server_config().show_visitor_stats.enabled {
+        let stats = get_visitor_stats();
+        let visitor_stats = VisitorStats {
+            total_visits: stats.total_visits(),
+            unique_ips: stats.unique_ip_count(),
+        };
+        Some(visitor_stats)
+    } else {
+        None
     };
     
     StatusResponse {
@@ -125,5 +172,6 @@ pub async fn get_status() -> StatusResponse {
             timestamp,
             uptime,
         },
+        visitor_stats,
     }
 }

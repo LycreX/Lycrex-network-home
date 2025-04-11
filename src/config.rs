@@ -14,6 +14,26 @@ pub struct ServerConfig {
     pub title: String,
     pub subtitle: String,
     pub port: u16,
+    pub show_visitor_stats: VisitorStatsConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct VisitorStatsConfig {
+    pub enabled: bool,
+    pub show_total_visits: bool,
+    pub show_unique_ips: bool,
+    pub show_personal_visits: bool,
+}
+
+impl Default for VisitorStatsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_total_visits: true,
+            show_unique_ips: true,
+            show_personal_visits: true,
+        }
+    }
 }
 
 impl Default for ServerConfig {
@@ -25,6 +45,7 @@ impl Default for ServerConfig {
             title: "LycreX".to_string(),
             subtitle: "> programming for acg".to_string(),
             port: 1111,
+            show_visitor_stats: VisitorStatsConfig::default(),
         }
     }
 }
@@ -102,6 +123,12 @@ pub fn start_config_watcher() -> notify::Result<()> {
                                 message: new_config.server.message.clone(),
                                 title: new_config.server.title.clone(),
                                 subtitle: new_config.server.subtitle.clone(),
+                                show_visitor_stats: crate::api::status::VisitorStatsConfig {
+                                    enabled: new_config.server.show_visitor_stats.enabled,
+                                    show_total_visits: new_config.server.show_visitor_stats.show_total_visits,
+                                    show_unique_ips: new_config.server.show_visitor_stats.show_unique_ips,
+                                    show_personal_visits: new_config.server.show_visitor_stats.show_personal_visits,
+                                },
                             };
                             
                             // 更新服务器状态
@@ -135,6 +162,24 @@ fn reload_config() -> Result<Config, config::ConfigError> {
         .add_source(config::File::with_name("config"))
         .build()
         .and_then(|settings| settings.try_deserialize::<Config>())?;
+
+    // 转换并更新服务器配置
+    let server_config = crate::api::status::ServerConfig {
+        name: new_config.server.name.clone(),
+        status: new_config.server.status.clone(),
+        message: new_config.server.message.clone(),
+        title: new_config.server.title.clone(),
+        subtitle: new_config.server.subtitle.clone(),
+        show_visitor_stats: crate::api::status::VisitorStatsConfig {
+            enabled: new_config.server.show_visitor_stats.enabled,
+            show_total_visits: new_config.server.show_visitor_stats.show_total_visits,
+            show_unique_ips: new_config.server.show_visitor_stats.show_unique_ips,
+            show_personal_visits: new_config.server.show_visitor_stats.show_personal_visits,
+        },
+    };
+    
+    // 更新服务器状态
+    update_server_status(server_config);
 
     Ok(new_config)
 } 

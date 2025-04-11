@@ -122,3 +122,22 @@ body {
 .status-other .status-indicator {
     background-color: #ffff00;
 }
+
+/* 访问者统计样式 */
+.visitor-stats {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    font-weight: 200;
+    padding: 5px;
+    z-index: 100;
+    display: none; /* 默认隐藏，由JavaScript控制显示 */
+}
+
+.visitor-stats span {
+    margin: 0 5px;
+}
