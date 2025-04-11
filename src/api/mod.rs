@@ -15,6 +15,7 @@ pub fn api_routes() -> Router {
         .route("/status", get(status_handler))
         .route("/visitor", get(visitor_handler))
         .route("/current-ip", get(current_ip_handler))
+        .route("/version", get(version_handler))
 }
 
 async fn status_handler() -> Json<serde_json::Value> {
@@ -37,5 +38,16 @@ async fn current_ip_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Json<
     Json(json!({
         "ip": ip,
         "visits": stats.get_ip_visit_count(&ip)
+    }))
+}
+
+// 获取服务器版本信息
+async fn version_handler() -> Json<serde_json::Value> {
+    let version = env!("CARGO_PKG_VERSION");
+    let name = env!("CARGO_PKG_NAME");
+    
+    Json(json!({
+        "name": name,
+        "version": version
     }))
 } 
