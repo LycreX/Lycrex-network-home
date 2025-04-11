@@ -117,11 +117,51 @@ document.addEventListener('DOMContentLoaded', () => {
             letter-spacing: -0.03em;
             transition: opacity 1.8s ease;
         }
+        
+        /* 样式4: X和LYCRE组合效果 */
+        .bg-style-4 {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: opacity 3.5s ease;
+        }
+
+        .bg-style-4 .x-letter {
+            position: absolute;
+            font-size: 80vw;
+            color: rgba(200, 200, 200, 0.04);
+            font-weight: 900;
+            z-index: -1;
+            top: 50%;
+            right: -20%;
+            transform: translateY(-50%);
+            transition: opacity 4s ease;
+        }
+
+        .bg-style-4 .lycre-text {
+            position: absolute;
+            font-size: 20vw;
+            color: rgba(180, 180, 180, 0.07);
+            font-weight: 900;
+            z-index: 1;
+            top: 50%;
+            left: 40%;
+            transform: translate(-50%, -50%);
+            transition: opacity 3s ease;
+        }
     `;
     document.head.appendChild(style);
 
-    // 创建高级打字效果函数
+    /**
+     * 高级打字效果类
+     */
     class TypeWriter {
+        /**
+         * 构造函数
+         * @param {HTMLElement} element - 要显示文字的元素
+         * @param {Object} options - 配置选项
+         */
         constructor(element, options = {}) {
             this.element = element;
             this.cursor = cursorElement;
@@ -139,12 +179,22 @@ document.addEventListener('DOMContentLoaded', () => {
             this.enterCallback = null;
         }
 
-        // 获取随机延迟
+        /**
+         * 获取随机延迟时间
+         * @param {number} min - 最小延迟毫秒数
+         * @param {number} max - 最大延迟毫秒数
+         * @returns {number} 随机延迟时间
+         */
         getRandomDelay(min, max) {
             return Math.floor(Math.random() * (max - min + 1) + min);
         }
         
-        // 添加文本到队列
+        /**
+         * 添加文本到队列（会被删除）
+         * @param {string} text - 要显示的文本
+         * @param {Function} callback - 完成后的回调函数
+         * @returns {TypeWriter} 链式调用
+         */
         addText(text, callback = null) {
             this.queue.push({ 
                 text, 
@@ -157,7 +207,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return this;
         }
         
-        // 添加永久文本（不会被删除）
+        /**
+         * 添加永久文本（不会被删除）
+         * @param {string} text - 要显示的文本
+         * @param {Function} callback - 完成后的回调函数
+         * @returns {TypeWriter} 链式调用
+         */
         addPermanentText(text, callback = null) {
             this.queue.push({ 
                 text, 
@@ -170,7 +225,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return this;
         }
         
-        // 处理队列
+        /**
+         * 处理文本队列
+         */
         processQueue() {
             if (this.queue.length === 0 || this.isPaused) {
                 this.isWaiting = false;
@@ -183,18 +240,20 @@ document.addEventListener('DOMContentLoaded', () => {
             this.currentIndex = 0;
             this.isDeleting = false;
             
-            // 执行打字动画
             this.typeStep(shouldDelete, callback);
         }
         
-        // 打字步骤
+        /**
+         * 打字动画步骤
+         * @param {boolean} shouldDelete - 是否需要删除文本
+         * @param {Function} callback - 完成后的回调函数
+         */
         typeStep(shouldDelete = true, callback = null) {
             if (this.isPaused) {
                 setTimeout(() => this.typeStep(shouldDelete, callback), 100);
                 return;
             }
             
-            // 决定是打字还是删除
             if (!this.isDeleting && this.currentIndex < this.text.length) {
                 // 正在打字
                 this.currentIndex++;
@@ -256,7 +315,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // 处理Enter按键
+        /**
+         * 处理Enter按键事件
+         * @param {KeyboardEvent} event - 键盘事件
+         */
         handleEnterKey = (event) => {
             if (event.key === 'Enter' && this.enterCallback) {
                 event.preventDefault();
@@ -267,48 +329,72 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // 更新文本显示
+        /**
+         * 更新文本显示
+         */
         updateText() {
-            // 获取当前显示的文本内容
             const currentText = this.text.substring(0, this.currentIndex);
-            
-            // 处理换行符，将文本内容转换为HTML
             const formattedText = currentText.replace(/\n/g, '<br>');
             
-            // 使用innerHTML而不是textContent以支持HTML标签
             this.element.innerHTML = formattedText;
             this.element.appendChild(this.cursor);
         }
         
-        // 暂停打字
+        /**
+         * 暂停打字动画
+         * @returns {TypeWriter} 链式调用
+         */
         pause() {
             this.isPaused = true;
             return this;
         }
         
-        // 继续打字
+        /**
+         * 继续打字动画
+         * @returns {TypeWriter} 链式调用
+         */
         resume() {
             this.isPaused = false;
             return this;
         }
 
-        // 显示背景文字
+        /**
+         * 显示背景文字
+         */
         showBackgroundText() {
             // 检查是否已经有背景文字
             if (!document.querySelector('.background-text')) {
                 const container = document.querySelector('.typing-section') || document.body;
                 const bgTextElement = document.createElement('div');
                 bgTextElement.className = 'background-text';
+                bgTextElement.style.opacity = '0';
                 
                 // 随机选择样式
-                const styles = ['bg-style-1', 'bg-style-2', 'bg-style-3'];
+                const styles = ['bg-style-1', 'bg-style-2', 'bg-style-3', 'bg-style-4'];
                 const randomStyle = styles[Math.floor(Math.random() * styles.length)];
                 bgTextElement.classList.add(randomStyle);
                 
                 // 根据不同样式设置内容
                 if (randomStyle === 'bg-style-2') {
-                    // 空内容，因为使用了::before和::after
+                    // 样式2使用::before和::after伪元素
                     bgTextElement.textContent = '';
+                } else if (randomStyle === 'bg-style-4') {
+                    // 样式4：创建X和LYCRE两层背景
+                    bgTextElement.innerHTML = '';
+                    
+                    // 创建大X背景
+                    const xElement = document.createElement('div');
+                    xElement.className = 'x-letter';
+                    xElement.textContent = 'X';
+                    xElement.style.opacity = '0';
+                    bgTextElement.appendChild(xElement);
+                    
+                    // 创建LYCRE背景
+                    const lycreElement = document.createElement('div');
+                    lycreElement.className = 'lycre-text';
+                    lycreElement.textContent = 'LYCRE';
+                    lycreElement.style.opacity = '0';
+                    bgTextElement.appendChild(lycreElement);
                 } else {
                     // 默认文本内容
                     bgTextElement.textContent = "LYCREX";
@@ -319,6 +405,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 强制回流并开始动画
                 setTimeout(() => {
                     bgTextElement.style.opacity = '1';
+                    
+                    // 如果是样式4，分别为X和LYCRE设置错开淡入
+                    if (randomStyle === 'bg-style-4') {
+                        const xElement = bgTextElement.querySelector('.x-letter');
+                        const lycreElement = bgTextElement.querySelector('.lycre-text');
+                        
+                        setTimeout(() => {
+                            if (xElement) xElement.style.opacity = '1';
+                        }, 100);
+                        
+                        setTimeout(() => {
+                            if (lycreElement) lycreElement.style.opacity = '1';
+                        }, 600);
+                    }
                 }, 10);
             }
         }
@@ -350,9 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 启动动画序列
             setTimeout(() => {
-                // 添加主标题（需要删除）
                 titleTyper.addText(mainText, () => {
-                    // 主标题完成后，开始副标题
                     subtitleTyper.addText(subtitleText);
                 });
             }, 800);
