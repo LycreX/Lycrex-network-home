@@ -44,18 +44,26 @@ async function fetchVisitorStats() {
         // Get current IP visit count (if configuration allows)
         if (showPersonal) {
             try {
-                const ipResponse = await fetch('/api/current-ip');
-                if (ipResponse.ok) {
-                    const ipData = await ipResponse.json();
-                    
-                    if (hasContent) {
-                        statsHtml += ' | ';
-                    }
-                    
-                    statsHtml += `<span>You(${ipData.ip}) visited: ${ipData.visits} times</span>`;
+                // get visitor IP address
+                const ipAddress = await getVisitorIpAddress();
+                
+                // report visit information
+                const reportResponse = await reportVisit(ipAddress);
+                
+                if (hasContent) {
+                    statsHtml += ' | ';
+                }
+                
+                // show visit count
+                if (reportResponse.success) {
+                    statsHtml += `<span>You(${ipAddress}) visited: ${reportResponse.visits} times</span>`;
+                } else {
+                    statsHtml += `<span>You(${ipAddress})'s visit statistics are not available</span>`;
                 }
             } catch (error) {
-                console.error('Failed to get current IP statistics:', error);
+                console.error('Failed to get/report visit statistics:', error);
+                if (hasContent) statsHtml += ' | ';
+                statsHtml += `<span>Failed to get visit statistics</span>`;
             }
         }
         
@@ -69,4 +77,41 @@ async function fetchVisitorStats() {
 // Get visitor statistics after page loads
 document.addEventListener('DOMContentLoaded', fetchVisitorStats);
 
-setInterval(fetchVisitorStats, 10000); 
+setInterval(fetchVisitorStats, 60000); 
+
+// get visitor IP address
+async function getVisitorIpAddress() {
+    try {
+        // use external service to get IP address
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip;
+    } catch (error) {
+        try {
+            const response = await fetch('https://api.db-ip.com/v2/free/self');
+            const data = await response.json();
+            return data.ipAddress;
+        } catch (secondError) {
+            const randomIP = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+            return randomIP;
+        }
+    }
+}
+
+// report visit information
+async function reportVisit(ipAddress) {
+    try {
+        const response = await fetch('/api/report-visitor', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ip: ipAddress }),
+        });
+        
+        return await response.json();
+    } catch (error) {
+        console.error('report visit failed:', error);
+        return { success: false, message: 'report visit failed', visits: 0 };
+    }
+} 

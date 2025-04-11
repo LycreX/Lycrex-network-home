@@ -1,5 +1,5 @@
 use axum::{
-    routing::get,
+    routing::{get, post},
     Router,
     Json,
     extract::ConnectInfo,
@@ -16,6 +16,7 @@ pub fn api_routes() -> Router {
         .route("/visitor", get(visitor_handler))
         .route("/current-ip", get(current_ip_handler))
         .route("/version", get(version_handler))
+        .route("/report-visitor", post(report_visitor_handler))
 }
 
 async fn status_handler() -> Json<serde_json::Value> {
@@ -41,10 +42,19 @@ async fn current_ip_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Json<
     }))
 }
 
+// 处理客户端上报的访问者IP
+async fn report_visitor_handler(payload: Json<visitor::VisitorReportRequest>) -> Json<serde_json::Value> {
+    let response = visitor::report_visitor_ip(payload).await;
+    Json(json!({
+        "success": response.success,
+        "message": response.message,
+        "visits": response.visits
+    }))
+}
+
 // 获取服务器版本信息
 async fn version_handler() -> Json<serde_json::Value> {
     let version = env!("CARGO_PKG_VERSION");
-    let name = env!("CARGO_PKG_NAME");
     
     // 获取Git提交版本
     let git_commit = {

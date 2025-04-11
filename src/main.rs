@@ -5,7 +5,7 @@ mod config;
 use log::init_log;
 use config::{init_config, get_server_config, start_config_watcher};
 use api::status::init_server_config;
-use api::visitor::{init_visitor_stats, visitor_middleware, save_stats};
+use api::visitor::{init_visitor_stats, save_stats};
 
 use rimplog::info;
 use std::sync::Arc;
@@ -15,7 +15,6 @@ use axum::{
     routing::get,
     Router,
     response::Html,
-    middleware::from_fn_with_state,
 };
 use tokio::net::TcpListener;
 use std::net::SocketAddr;
@@ -55,8 +54,7 @@ async fn main() {
         .route("/", get(handler))
         .route("/static/*path", get(static_files::serve_static_file))
         .nest("/api", api::api_routes())
-        .layer(cors)
-        .layer(from_fn_with_state((), visitor_middleware));
+        .layer(cors);
 
     let port = get_server_config().port;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
