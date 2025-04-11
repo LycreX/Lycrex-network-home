@@ -153,7 +153,14 @@ body {
     padding: 5px;
     z-index: 100;
     display: none; /* 默认隐藏，由JavaScript控制显示 */
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.5);
     border-radius: 4px;
     padding: 5px 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.server-version:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    color: rgba(255, 255, 255, 0.9);
 }

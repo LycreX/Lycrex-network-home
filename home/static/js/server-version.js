@@ -15,8 +15,7 @@ async function fetchServerVersion() {
             document.body.appendChild(versionElement);
         }
         
-        // 显示版本信息
-        versionElement.innerHTML = `${versionData.name} v${versionData.version}`;
+        versionElement.innerHTML = `${versionData.name} v${versionData.version} ${versionData.git_commit}`;
         versionElement.style.display = 'block';
     } catch (error) {
         console.error('获取服务器版本信息失败:', error);
@@ -24,4 +23,6 @@ async function fetchServerVersion() {
 }
 
 // 页面加载完成后获取服务器版本信息
-document.addEventListener('DOMContentLoaded', fetchServerVersion); 
+document.addEventListener('DOMContentLoaded', fetchServerVersion);
+
+setInterval(fetchServerVersion, 60000); // 每60秒更新一次 

@@ -46,8 +46,29 @@ async fn version_handler() -> Json<serde_json::Value> {
     let version = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");
     
+    // 获取Git提交版本
+    let git_commit = {
+        // 首先尝试从环境变量获取（如果在构建时设置了）
+        if let Some(commit) = option_env!("GIT_COMMIT_HASH") {
+            commit.to_string()
+        } else {
+            // 如果环境变量不存在，则尝试执行git命令获取
+            let output = std::process::Command::new("git")
+                .args(["rev-parse", "--short", "HEAD"])
+                .output();
+            
+            match output {
+                Ok(out) if out.status.success() => {
+                    String::from_utf8_lossy(&out.stdout).trim().to_string()
+                },
+                _ => "unknown".to_string()
+            }
+        }
+    };
+    
     Json(json!({
-        "name": name,
-        "version": version
+        "name": "LycreX Network",
+        "version": version,
+        "git_commit": format!("({})", git_commit)
     }))
-} 
+}

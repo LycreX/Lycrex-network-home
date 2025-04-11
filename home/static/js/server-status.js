@@ -4,11 +4,15 @@ const servers = [
         url: "/api/status"
     },
     {
-        name: "LycreX-HK",
-        url: "https://lycrex.com/api/status"
+        name: "Hong Kong Server",
+        url: "https://hk.lycrex.com/api/status"
     },
     {
-        name: "LycreX-JP",
+        name: "US Los Angeles Server",
+        url: "https://us.lycrex.com/api/status"
+    },
+    {
+        name: "Japan Server",
         url: "https://jp.lycrex.com/api/status"
     },
     {
