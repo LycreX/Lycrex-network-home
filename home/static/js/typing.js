@@ -291,14 +291,56 @@ document.addEventListener('DOMContentLoaded', () => {
                     promptElement.textContent = '按下Enter继续...';
                     promptElement.style.fontSize = '12px';
                     promptElement.style.marginTop = '5px';
-                    promptElement.style.opacity = '0.7';
+                    promptElement.style.opacity = '0';
+                    promptElement.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+                    promptElement.style.transform = 'translateY(-10px)'; // 初始位置向上偏移
                     this.element.parentNode.appendChild(promptElement);
+                    
+                    // 强制回流并开始动画
+                    setTimeout(() => {
+                        promptElement.style.opacity = '0.7';
+                        promptElement.style.transform = 'translateY(0)';
+                    }, 10);
+
+                    let bpromptTimeout = false;
+                    
+                    // 创建5秒后自动淡出的定时器
+                    const promptTimeout = setTimeout(() => {
+                        if (this.enterCallback) {
+                            // 淡出效果
+                            promptElement.style.opacity = '0';
+                            promptElement.style.transform = 'translateY(10px)'; // 向下淡出
+                            
+                            // 等待过渡完成后再移除元素
+                            setTimeout(() => {
+                                if (promptElement.parentNode) {
+                                    this.element.parentNode.removeChild(promptElement);
+                                }
+                            }, 600); // 与过渡时间匹配
+                        }
+                        bpromptTimeout = true;
+                    }, 5000); // 5秒后自动淡出
                     
                     // 等待Enter按键
                     this.enterCallback = () => {
-                        this.element.parentNode.removeChild(promptElement);
-                        this.isDeleting = true;
-                        this.typeStep(shouldDelete, callback);
+                        // 清除自动淡出定时器
+                        clearTimeout(promptTimeout);
+                        
+                        // 淡出效果
+                        promptElement.style.opacity = '0';
+                        promptElement.style.transform = 'translateY(10px)'; // 向下淡出
+                        
+                        let fpromptTimeout = 600;
+                        if (bpromptTimeout) {
+                            fpromptTimeout = 0;
+                        }
+                        setTimeout(() => {
+                            if (promptElement.parentNode) {
+                                this.element.parentNode.removeChild(promptElement);
+                            }
+                            this.isDeleting = true;
+                            this.typeStep(shouldDelete, callback);
+                        }, fpromptTimeout);
                     };
                     
                     document.addEventListener('keydown', this.handleEnterKey);
