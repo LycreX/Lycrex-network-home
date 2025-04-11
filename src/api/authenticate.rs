@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use std::time::{Duration, SystemTime};
+use crate::config::{get_server_config, get_auth_config};
 
 #[derive(Deserialize)]
 pub struct AuthenticateRequest {
@@ -43,11 +44,6 @@ struct TokenData {
     status: TokenStatus,
 }
 
-// 定义预设的系统密码
-const SYSTEM_PASSWORD: &str = "123"; // 实际应用中应使用环境变量或配置文件存储
-// Token有效期，单位为秒
-const TOKEN_EXPIRATION_SECONDS: u64 = 10; // 1小时
-
 // 使用线程安全的全局变量存储有效的token
 static VALID_TOKENS: Lazy<Arc<Mutex<HashMap<String, TokenData>>>> = Lazy::new(|| {
     Arc::new(Mutex::new(HashMap::new()))
@@ -65,7 +61,7 @@ fn generate_and_store_token(ip_address: &str) -> String {
             created_at: SystemTime::now(),
             status: TokenStatus::Active,
         });
-        info!("生成并存储新token: {}, IP: {}", token, ip_address);
+        debug!("生成并存储新token: {}, IP: {}", token, ip_address);
     }
     
     token
@@ -169,12 +165,18 @@ pub fn get_token_status(token: &str) -> Option<(TokenStatus, String)> {
 fn update_tokens_status(tokens: &mut HashMap<String, TokenData>) {
     // 使用下划线前缀表示有意不使用的变量
     let _now = SystemTime::now();
+    // 从配置中获取令牌过期时间，优先使用最新配置
+    let token_expiration_seconds = match get_auth_config() {
+        Some(auth_config) => auth_config.token_expiration_seconds,
+        None => get_server_config().auth.token_expiration_seconds,
+    };
+    
     for (_, data) in tokens.iter_mut() {
         if let TokenStatus::Active = data.status {
             if let Ok(elapsed) = data.created_at.elapsed() {
-                if elapsed > Duration::from_secs(TOKEN_EXPIRATION_SECONDS) {
+                if elapsed > Duration::from_secs(token_expiration_seconds) {
                     // 标记为过期并计算过期了多长时间
-                    let expired_for = elapsed - Duration::from_secs(TOKEN_EXPIRATION_SECONDS);
+                    let expired_for = elapsed - Duration::from_secs(token_expiration_seconds);
                     data.status = TokenStatus::Expired(expired_for);
                     debug!("标记Token为过期状态，过期时间: {}", format_duration(expired_for));
                 }
@@ -188,10 +190,10 @@ fn update_tokens_status(tokens: &mut HashMap<String, TokenData>) {
 pub fn revoke_token(token: &str) -> bool {
     if let Ok(mut tokens) = VALID_TOKENS.lock() {
         if tokens.remove(token).is_some() {
-            info!("已撤销token: {}", token);
+            debug!("已撤销token: {}", token);
             return true;
         } else {
-            info!("token不存在，无法撤销: {}", token);
+            debug!("token不存在，无法撤销: {}", token);
             return false;
         }
     }
@@ -222,12 +224,29 @@ pub fn list_valid_tokens() -> Vec<(String, String, String, bool)> {
 pub async fn authenticate_password(password: &str, client_ip: Option<&str>) -> AuthenticateResponse {
     // 如果没有提供客户端IP，记录错误但继续处理
     let ip = client_ip.unwrap_or("unknown");
-    info!("处理密码验证，IP: {}", ip);
+    debug!("处理密码验证，IP: {}", ip);
+    
+    // 从配置中获取系统密码，优先使用最新配置
+    let system_password = match get_auth_config() {
+        Some(auth_config) => {
+            debug!("使用最新认证配置: 密码={}, 令牌过期时间={}秒", 
+                   auth_config.password, auth_config.token_expiration_seconds);
+            auth_config.password
+        },
+        None => {
+            debug!("无法获取最新认证配置，使用静态配置");
+            get_server_config().auth.password.clone()
+        },
+    };
+    
+    debug!("用户输入密码: {}, 系统密码: {}", password, system_password);
     
     // 简单验证密码是否匹配
-    if password == SYSTEM_PASSWORD {
+    if password == system_password {
         // 验证成功，生成令牌并与IP关联
         let token = generate_and_store_token(ip);
+        
+        debug!("密码验证成功，生成令牌: {}", token);
         
         AuthenticateResponse {
             success: true,
@@ -236,7 +255,7 @@ pub async fn authenticate_password(password: &str, client_ip: Option<&str>) -> A
         }
     } else {
         // 验证失败，不返回令牌
-        info!("密码验证失败，IP: {}", ip);
+        info!("密码验证失败，IP: {}, 输入: {}, 期望: {}", ip, password, system_password);
         AuthenticateResponse {
             success: false,
             message: "密码错误".to_string(),

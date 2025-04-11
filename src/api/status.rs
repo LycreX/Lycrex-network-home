@@ -4,6 +4,7 @@ use sysinfo::System;
 use std::sync::{OnceLock, Mutex};
 use crate::config::get_server_config;
 use crate::api::visitor::get_visitor_stats;
+use rimplog::info;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerConfig {
@@ -13,6 +14,7 @@ pub struct ServerConfig {
     pub title: String,
     pub subtitle: String,
     pub show_visitor_stats: VisitorStatsConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -23,7 +25,14 @@ pub struct VisitorStatsConfig {
     pub show_personal_visits: bool,
 }
 
-static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AuthConfig {
+    pub password: String,
+    pub token_expiration_seconds: u64,
+}
+
+// 导出SERVER_CONFIG以便在config模块中可以访问
+pub static SERVER_CONFIG: OnceLock<Mutex<ServerConfig>> = OnceLock::new();
 
 #[derive(Serialize, Deserialize)]
 pub struct StatusResponse {
@@ -69,6 +78,10 @@ pub fn init_server_config() {
             show_unique_ips: config.show_visitor_stats.show_unique_ips,
             show_personal_visits: config.show_visitor_stats.show_personal_visits,
         },
+        auth: AuthConfig {
+            password: config.auth.password.clone(),
+            token_expiration_seconds: config.auth.token_expiration_seconds,
+        },
     };
     
     // 初始化为Mutex包装的ServerConfig
@@ -80,11 +93,25 @@ pub fn update_server_status(server_config: ServerConfig) {
     if let Some(mutex) = SERVER_CONFIG.get() {
         // 获取锁并更新内部值
         if let Ok(mut config) = mutex.lock() {
+            // 记录关键配置信息的变更
+            if config.auth.password != server_config.auth.password {
+                info!("更新系统密码: {} -> {}", config.auth.password, server_config.auth.password);
+            }
+            if config.auth.token_expiration_seconds != server_config.auth.token_expiration_seconds {
+                info!("更新令牌过期时间: {}秒 -> {}秒", 
+                     config.auth.token_expiration_seconds, 
+                     server_config.auth.token_expiration_seconds);
+            }
+            
+            // 更新配置
             *config = server_config;
+        } else {
+            info!("无法获取服务器配置锁，更新失败");
         }
     } else {
         // 如果尚未初始化，则进行初始化
         SERVER_CONFIG.get_or_init(|| Mutex::new(server_config));
+        info!("服务器配置已初始化");
     }
 }
 
@@ -127,6 +154,10 @@ pub async fn get_status() -> StatusResponse {
                     show_unique_ips: config.show_visitor_stats.show_unique_ips,
                     show_personal_visits: config.show_visitor_stats.show_personal_visits,
                 },
+                auth: AuthConfig {
+                    password: config.auth.password.clone(),
+                    token_expiration_seconds: config.auth.token_expiration_seconds,
+                },
             }
         }
     } else {
@@ -143,6 +174,10 @@ pub async fn get_status() -> StatusResponse {
                 show_total_visits: config.show_visitor_stats.show_total_visits,
                 show_unique_ips: config.show_visitor_stats.show_unique_ips,
                 show_personal_visits: config.show_visitor_stats.show_personal_visits,
+            },
+            auth: AuthConfig {
+                password: config.auth.password.clone(),
+                token_expiration_seconds: config.auth.token_expiration_seconds,
             },
         }
     };
