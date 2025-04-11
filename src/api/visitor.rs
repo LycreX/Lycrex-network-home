@@ -9,6 +9,8 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use rimplog::info;
 use regex;
+use tokio::time::{interval, Duration};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // 访问者统计数据
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -42,6 +44,9 @@ impl VisitorStats {
 // 访问者统计单例
 static VISITOR_STATS: OnceLock<Arc<Mutex<VisitorStats>>> = OnceLock::new();
 
+// 定时保存任务状态
+static TIMER_RUNNING: AtomicBool = AtomicBool::new(false);
+
 // 初始化访问者统计
 pub fn init_visitor_stats() {
     let stats = if let Ok(content) = fs::read_to_string("visitor_stats.json") {
@@ -52,6 +57,31 @@ pub fn init_visitor_stats() {
     
     VISITOR_STATS.get_or_init(|| Arc::new(Mutex::new(stats)));
     info!("访问者统计已初始化");
+}
+
+// 启动定时保存功能
+pub fn start_periodic_save(interval_secs: u64) {
+    // 防止重复启动
+    if TIMER_RUNNING.swap(true, Ordering::SeqCst) {
+        info!("定时保存任务已在运行中");
+        return;
+    }
+    
+    info!("启动定时保存访问者统计数据，间隔：{}秒", interval_secs);
+    
+    // 创建一个新的异步任务来定时保存数据
+    tokio::spawn(async move {
+        let mut interval_timer = interval(Duration::from_secs(interval_secs));
+        
+        loop {
+            // 等待下一个间隔
+            interval_timer.tick().await;
+            
+            // 保存访问者统计数据
+            save_visitor_stats();
+            info!("已定时保存访问者统计数据");
+        }
+    });
 }
 
 // 获取访问者统计

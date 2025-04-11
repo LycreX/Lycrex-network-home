@@ -5,7 +5,7 @@ mod config;
 use log::init_log;
 use config::{init_config, get_server_config, start_config_watcher};
 use api::status::init_server_config;
-use api::visitor::{init_visitor_stats, save_stats};
+use api::visitor::{init_visitor_stats, save_stats, start_periodic_save};
 
 use rimplog::info;
 use std::sync::Arc;
@@ -37,6 +37,9 @@ async fn main() {
     
     // 初始化访问统计
     init_visitor_stats();
+    
+    // 启动定时保存功能 - 每5分钟保存一次
+    start_periodic_save(300);
     
     // 启动配置文件监听
     if let Err(e) = start_config_watcher() {
