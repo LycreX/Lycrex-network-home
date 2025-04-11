@@ -1,8 +1,6 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::collections::{HashSet, HashMap};
 use axum::http::Request;
-use axum::middleware::Next;
-use axum::response::Response;
 use axum::extract::ConnectInfo;
 use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};
@@ -107,62 +105,6 @@ fn save_visitor_stats() {
             }
         }
     }
-}
-
-// 中间件: 记录访问者信息
-pub async fn visitor_middleware(
-    _state: (),
-    req: Request<axum::body::Body>,
-    next: Next,
-) -> Response {
-    // 获取请求路径
-    let path = req.uri().path();
-    
-    // 只对主页请求计数，忽略静态资源和API请求
-    let should_count = path == "/";
-    
-    if should_count {
-        // 尝试从请求中获取客户端IP
-        let ip = if let Some(x_forwarded_for) = req.headers().get("x-forwarded-for") {
-            // 从X-Forwarded-For获取
-            if let Ok(ip_str) = x_forwarded_for.to_str() {
-                // 取第一个IP（如果有多个）
-                ip_str.split(',').next().unwrap_or("unknown").trim().to_string()
-            } else {
-                "unknown".to_string()
-            }
-        } else if let Some(socket_addr) = req.extensions().get::<ConnectInfo<SocketAddr>>() {
-            // 从SocketAddr获取
-            socket_addr.0.ip().to_string()
-        } else {
-            // 无法获取IP
-            "unknown".to_string()
-        };
-        
-        // 更新访问统计
-        if let Some(stats_lock) = VISITOR_STATS.get() {
-            if let Ok(mut stats) = stats_lock.lock() {
-                stats.total_visits += 1;
-                
-                if ip != "unknown" {
-                    stats.unique_ips.insert(ip.clone());
-                    
-                    // 增加IP访问计数
-                    let count = stats.ip_visits.entry(ip).or_insert(0);
-                    *count += 1;
-                }
-                
-                // 每100次访问保存一次数据
-                if stats.total_visits % 100 == 0 {
-                    drop(stats); // 释放锁后保存
-                    save_visitor_stats();
-                }
-            }
-        }
-    }
-    
-    // 继续处理请求
-    next.run(req).await
 }
 
 // 获取访问者统计API

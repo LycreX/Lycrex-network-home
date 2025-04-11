@@ -520,6 +520,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 
 [[package]]
+name = "hermit-abi"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
+
+[[package]]
 name = "http"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -787,13 +793,17 @@ name = "lycrex-home"
 version = "0.0.2"
 dependencies = [
  "axum",
+ "chrono",
  "config",
  "include_dir",
  "notify",
+ "num_cpus",
+ "once_cell",
  "regex",
  "rimplog",
  "serde",
  "serde_json",
+ "sys-info",
  "sysinfo",
  "tokio",
  "toml 0.8.20",
@@ -911,6 +921,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "num_cpus"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
+dependencies = [
+ "hermit-abi",
+ "libc",
 ]
 
 [[package]]
@@ -1293,6 +1313,16 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "sys-info"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b3a0d0aba8bf96a0e1ddfdc352fc53b3df7f39318c71854910c3c4b024ae52c"
+dependencies = [
+ "cc",
+ "libc",
+]
 
 [[package]]
 name = "sysinfo"
