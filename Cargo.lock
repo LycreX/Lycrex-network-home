@@ -790,6 +790,7 @@ dependencies = [
  "config",
  "include_dir",
  "notify",
+ "regex",
  "rimplog",
  "serde",
  "serde_json",
