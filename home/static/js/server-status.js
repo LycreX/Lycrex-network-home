@@ -8,7 +8,7 @@ const servers = [
         url: "https://hk.lycrex.com/api/status"
     },
     {
-        name: "US Los Angeles Server",
+        name: "Los Angeles Server",
         url: "https://us.lycrex.com/api/status"
     },
     {
