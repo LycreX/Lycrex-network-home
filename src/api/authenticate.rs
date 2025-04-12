@@ -335,6 +335,7 @@ pub fn get_token_details() -> Vec<TokenDisplayInfo> {
 
 // 用于显示的token信息
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TokenDisplayInfo {
     pub token: String,        // 完整token (内部使用)
     pub token_masked: String, // 掩码后的token (显示用)

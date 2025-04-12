@@ -424,7 +424,6 @@ class Terminal {
         
         // 处理enter命令
         if (normalizedCommand.startsWith('enter ')) {
-            // enter命令通常会导致页面跳转，不需要持久显示
             return false;
         }
         
