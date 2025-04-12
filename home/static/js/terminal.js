@@ -193,17 +193,6 @@ class Terminal {
             return;
         }
         
-        // 客户端处理的password命令 (向后兼容)
-        if (command.toLowerCase() === 'password') {
-            // 切换到密码输入模式
-            this.passwordMode = true;
-            this.userInputText = '';
-            this.savedPassword = '';
-            this.showMessage('请输入密码:');
-            this.updateText();
-            return;
-        }
-        
         // 从会话存储中获取密码和令牌
         const password = window.sessionStorage.getItem('userPassword') || '';
         const token = window.sessionStorage.getItem('userToken') || '';
@@ -266,6 +255,18 @@ class Terminal {
                     window.sessionStorage.removeItem('userToken');
                     console.log('已移除无效token');
                 }
+            }
+            
+            // 检查服务器是否请求输入密码
+            if (data.request_password) {
+                // 切换到密码输入模式
+                this.passwordMode = true;
+                this.userInputText = '';
+                this.savedPassword = '';
+                // 显示服务器提供的密码请求消息
+                this.showMessage(data.request_password);
+                this.updateText();
+                return;
             }
             
             // 正常显示消息

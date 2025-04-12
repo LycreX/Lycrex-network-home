@@ -111,15 +111,16 @@ impl Command for TokenCommand {
             let status_marker = if token.is_expired { "❌" } else { "✅" };
             
             message.push_str(&format!(
-                "{}. 令牌: {}\n   IP: {}\n   创建时间: {}\n   过期时间: {}\n   状态: {}{}\n   撤销命令: token revoke {}\n\n",
+                // "{}. 令牌: {}\n   IP: {}\n   创建时间: {}\n   过期时间: {}\n   状态: {}{}\n   撤销命令: token revoke {}\n\n",
+                "{}. 令牌: {}\n   创建时间: {} - {}\n   状态: {}{}\n\n",
                 index + 1,
                 token.token_masked,
-                token.ip_address,
+                // token.ip_address,
                 token.created_at,
                 token.expires_at,
                 status_marker,
                 token.status,
-                index + 1
+                // index + 1
             ));
         }
         
