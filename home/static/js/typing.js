@@ -150,6 +150,55 @@ document.addEventListener('DOMContentLoaded', () => {
             transform: translate(-50%, -50%);
             transition: opacity 3s ease;
         }
+
+        /* 样式5: 双排律动效果 */
+        .bg-style-5 {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            transition: opacity 2s ease;
+        }
+
+        .bg-style-5 .top-row, 
+        .bg-style-5 .bottom-row {
+            position: absolute;
+            width: 300%;
+            white-space: nowrap;
+            font-size: 22vw;
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            left: 0;
+        }
+
+        .bg-style-5 .top-row {
+            top: 30%;
+            transform: translateY(-50%);
+            color: rgba(200, 200, 200, 0.05);
+            animation: slideLeft 30s linear infinite;
+        }
+
+        .bg-style-5 .bottom-row {
+            top: 70%;
+            transform: translateY(-50%);
+            color: rgba(200, 200, 200, 0.04);
+            animation: slideRight 30s linear infinite;
+        }
+
+        .bg-style-5 .text-container {
+            display: inline-block;
+            margin-right: 2vw;
+        }
+
+        @keyframes slideLeft {
+            0% { transform: translateY(-50%) translateX(0); }
+            100% { transform: translateY(-50%) translateX(-50%); }
+        }
+
+        @keyframes slideRight {
+            0% { transform: translateY(-50%) translateX(-50%); }
+            100% { transform: translateY(-50%) translateX(0); }
+        }
     `;
     document.head.appendChild(style);
 
@@ -419,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bgTextElement.style.opacity = '0';
                 
                 // 随机选择样式
-                const styles = ['bg-style-1', 'bg-style-2', 'bg-style-3', 'bg-style-4'];
+                const styles = ['bg-style-5'];
                 const randomStyle = styles[Math.floor(Math.random() * styles.length)];
                 bgTextElement.classList.add(randomStyle);
                 
@@ -444,6 +493,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     lycreElement.textContent = 'LYCRE';
                     lycreElement.style.opacity = '0';
                     bgTextElement.appendChild(lycreElement);
+                } else if (randomStyle === 'bg-style-5') {
+                    // 样式5：创建上下两排滚动文字
+                    bgTextElement.innerHTML = '';
+                    
+                    // 创建上排文字
+                    const topRow = document.createElement('div');
+                    topRow.className = 'top-row';
+                    
+                    // 重复文本以确保滚动连续
+                    for (let i = 0; i < 10; i++) {
+                        const textContainer = document.createElement('span');
+                        textContainer.className = 'text-container';
+                        textContainer.textContent = 'LYCREX';
+                        topRow.appendChild(textContainer);
+                    }
+                    
+                    // 创建下排文字
+                    const bottomRow = document.createElement('div');
+                    bottomRow.className = 'bottom-row';
+                    
+                    // 重复文本以确保滚动连续
+                    for (let i = 0; i < 10; i++) {
+                        const textContainer = document.createElement('span');
+                        textContainer.className = 'text-container';
+                        textContainer.textContent = 'LYCREX';
+                        bottomRow.appendChild(textContainer);
+                    }
+                    
+                    bgTextElement.appendChild(topRow);
+                    bgTextElement.appendChild(bottomRow);
                 } else {
                     // 默认文本内容
                     bgTextElement.textContent = "LYCREX";
