@@ -20,14 +20,17 @@ pub struct AuthenticateResponse {
     pub token: Option<String>,
 }
 
-// Token详细状态信息，用于API返回
+// Token详细状态信息，用于API返回和内部使用
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TokenStatusInfo {
-    pub is_valid: bool,
-    pub is_expired: bool,
-    pub expired_time: Option<String>,
-    #[allow(dead_code)]
-    pub ip_address: String,
+    pub token: String,         // 完整token
+    pub ip_address: String,    // IP地址
+    pub created_at: SystemTime, // 创建时间
+    pub is_valid: bool,        // 是否有效
+    pub is_expired: bool,      // 是否过期
+    pub expired_time: Option<String>, // 过期了多长时间（如果已过期）
+    pub expires_at: Option<SystemTime>, // 过期时间点
 }
 
 // Token状态枚举
@@ -49,22 +52,35 @@ static VALID_TOKENS: Lazy<Arc<Mutex<HashMap<String, TokenData>>>> = Lazy::new(||
     Arc::new(Mutex::new(HashMap::new()))
 });
 
-// 生成新token并存储到有效token集合中，与IP地址关联
-fn generate_and_store_token(ip_address: &str) -> String {
+// 生成新token并存储到有效token集合中，与IP地址关联，返回token和过期时间
+fn generate_and_store_token(ip_address: &str) -> (String, String) {
     let timestamp = chrono::Utc::now().timestamp();
     let token = format!("fake-token-{}", timestamp);
+    let now = SystemTime::now();
+    
+    // 获取过期时间（秒）
+    let token_expiration_seconds = match get_auth_config() {
+        Some(auth_config) => auth_config.token_expiration_seconds,
+        None => get_server_config().auth.token_expiration_seconds,
+    };
+    
+    // 计算过期时间点
+    let expires_at = chrono::DateTime::<chrono::Local>::from(now)
+        .checked_add_signed(chrono::Duration::seconds(token_expiration_seconds as i64))
+        .map(|time| time.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "计算错误".to_string());
     
     // 存储token和关联的IP地址
     if let Ok(mut tokens) = VALID_TOKENS.lock() {
         tokens.insert(token.clone(), TokenData {
             ip_address: ip_address.to_string(),
-            created_at: SystemTime::now(),
+            created_at: now,
             status: TokenStatus::Active,
         });
-        debug!("生成并存储新token: {}, IP: {}", token, ip_address);
+        debug!("生成并存储新token: {}, IP: {}, 过期时间: {}", token, ip_address, expires_at);
     }
     
-    token
+    (token, expires_at)
 }
 
 // 格式化持续时间为人类可读的形式
@@ -89,6 +105,12 @@ pub fn check_token(token: &str, client_ip: Option<&str>) -> Option<TokenStatusIn
         return None;
     }
     
+    // 获取过期时间（秒）
+    let token_expiration_seconds = match get_auth_config() {
+        Some(auth_config) => auth_config.token_expiration_seconds,
+        None => get_server_config().auth.token_expiration_seconds,
+    };
+    
     // 检查token是否在集合中
     if let Ok(mut tokens) = VALID_TOKENS.lock() {
         // 更新所有token的状态，但不删除它们
@@ -96,11 +118,15 @@ pub fn check_token(token: &str, client_ip: Option<&str>) -> Option<TokenStatusIn
         
         // 验证token是否存在
         if let Some(token_data) = tokens.get(token) {
+            // 默认状态
             let mut status_info = TokenStatusInfo {
+                token: token.to_string(),
+                ip_address: token_data.ip_address.clone(),
+                created_at: token_data.created_at,
                 is_valid: false,
                 is_expired: false,
                 expired_time: None,
-                ip_address: token_data.ip_address.clone(),
+                expires_at: Some(token_data.created_at + Duration::from_secs(token_expiration_seconds)),
             };
             
             // 检查token是否已过期
@@ -148,17 +174,8 @@ pub fn validate_token(token: &str, client_ip: Option<&str>) -> bool {
 
 // 获取token状态信息，用于API响应
 #[allow(dead_code)]
-pub fn get_token_status(token: &str) -> Option<(TokenStatus, String)> {
-    if let Ok(mut tokens) = VALID_TOKENS.lock() {
-        update_tokens_status(&mut tokens);
-        
-        if let Some(token_data) = tokens.get(token) {
-            let ip = token_data.ip_address.clone();
-            let status = token_data.status.clone();
-            return Some((status, ip));
-        }
-    }
-    None
+pub fn get_token_status(token: &str) -> Option<TokenStatusInfo> {
+    check_token(token, None)
 }
 
 // 更新所有token的状态，将过期的标记为过期
@@ -244,13 +261,16 @@ pub async fn authenticate_password(password: &str, client_ip: Option<&str>) -> A
     // 简单验证密码是否匹配
     if password == system_password {
         // 验证成功，生成令牌并与IP关联
-        let token = generate_and_store_token(ip);
+        let (token, expires_at) = generate_and_store_token(ip);
         
         debug!("密码验证成功，生成令牌: {}", token);
         
+        // 掩盖token中间部分用于显示
+        let masked_token = mask_token(&token);
+        
         AuthenticateResponse {
             success: true,
-            message: "密码验证成功".to_string(),
+            message: format!("密码验证成功\n令牌: {}\n过期时间: {}", masked_token, expires_at),
             token: Some(token),
         }
     } else {
@@ -262,4 +282,76 @@ pub async fn authenticate_password(password: &str, client_ip: Option<&str>) -> A
             token: None,
         }
     }
+}
+
+// 获取所有token的详细信息，包括创建时间和过期时间
+pub fn get_token_details() -> Vec<TokenDisplayInfo> {
+    if let Ok(mut tokens) = VALID_TOKENS.lock() {
+        update_tokens_status(&mut tokens);
+        
+        let token_expiration_seconds = match get_auth_config() {
+            Some(auth_config) => auth_config.token_expiration_seconds,
+            None => get_server_config().auth.token_expiration_seconds,
+        };
+        
+        tokens
+            .iter()
+            .map(|(token, data)| {
+                // 创建时间格式化
+                let created_at = chrono::DateTime::<chrono::Local>::from(data.created_at)
+                    .format("%Y-%m-%d %H:%M:%S").to_string();
+                
+                // 计算过期时间
+                let expires_at = match chrono::DateTime::<chrono::Local>::from(data.created_at)
+                    .checked_add_signed(chrono::Duration::seconds(token_expiration_seconds as i64)) {
+                    Some(time) => time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                    None => "计算错误".to_string(),
+                };
+                
+                // 掩盖token中间部分
+                let masked_token = mask_token(token);
+                
+                // 状态信息
+                let (status_text, is_expired) = match &data.status {
+                    TokenStatus::Active => ("有效".to_string(), false),
+                    TokenStatus::Expired(duration) => (format!("已过期 {}", format_duration(*duration)), true),
+                };
+                
+                TokenDisplayInfo {
+                    token: token.clone(),
+                    token_masked: masked_token,
+                    ip_address: data.ip_address.clone(),
+                    created_at,
+                    expires_at,
+                    status: status_text,
+                    is_expired,
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+// 用于显示的token信息
+#[derive(Debug, Clone)]
+pub struct TokenDisplayInfo {
+    pub token: String,        // 完整token (内部使用)
+    pub token_masked: String, // 掩码后的token (显示用)
+    pub ip_address: String,   // IP地址
+    pub created_at: String,   // 创建时间（格式化）
+    pub expires_at: String,   // 过期时间（格式化）
+    pub status: String,       // 状态描述
+    pub is_expired: bool,     // 是否已过期
+}
+
+// 将token中间部分用***掩盖
+fn mask_token(token: &str) -> String {
+    if token.len() <= 10 {
+        return token.to_string();
+    }
+    
+    let prefix = &token[0..5];
+    let suffix = &token[token.len() - 5..];
+    format!("{}***{}", prefix, suffix)
 }

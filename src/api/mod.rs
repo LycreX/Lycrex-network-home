@@ -13,6 +13,7 @@ pub mod status;
 pub mod visitor;
 pub mod command;
 pub mod authenticate;
+pub mod commands;
 
 pub fn api_routes() -> Router {
     Router::new()
@@ -161,7 +162,7 @@ async fn command_handler(
         if let Some(status_info) = authenticate::check_token(t, client_ip.as_deref()) {
             // 构建token状态结构
             let valid = status_info.is_valid;
-            token_status = Some(command::TokenStatus {
+            token_status = Some(commands::TokenStatus {
                 valid,
                 expired: status_info.is_expired,
                 expired_for: status_info.expired_time,
@@ -169,7 +170,7 @@ async fn command_handler(
             valid
         } else {
             // token不存在
-            token_status = Some(command::TokenStatus {
+            token_status = Some(commands::TokenStatus {
                 valid: false,
                 expired: false,
                 expired_for: None,
@@ -197,7 +198,8 @@ async fn command_handler(
     let mut response = command::process_command_with_auth(
         &payload.command, 
         password,
-        valid_token
+        valid_token,
+        client_ip.as_deref()
     ).await;
     
     // 添加token状态到响应

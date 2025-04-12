@@ -82,19 +82,12 @@ setInterval(fetchVisitorStats, 60000);
 // get visitor IP address
 async function getVisitorIpAddress() {
     try {
-        // use external service to get IP address
-        const response = await fetch('https://api.ipify.org?format=json');
+        const response = await fetch('https://api.db-ip.com/v2/free/self');
         const data = await response.json();
-        return data.ip;
-    } catch (error) {
-        try {
-            const response = await fetch('https://api.db-ip.com/v2/free/self');
-            const data = await response.json();
-            return data.ipAddress;
-        } catch (secondError) {
-            const randomIP = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
-            return randomIP;
-        }
+        return data.ipAddress;
+    } catch (secondError) {
+        const randomIP = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+        return randomIP;
     }
 }
 
