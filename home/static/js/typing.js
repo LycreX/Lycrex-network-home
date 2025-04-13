@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         .bg-style-5 .top-row {
-            top: 30%;
+            top: 28%;
             transform: translateY(-50%);
             color: rgba(200, 200, 200, 0.05);
             animation: slideLeft 30s linear infinite;
@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bgTextElement.style.opacity = '0';
                 
                 // 随机选择样式
-                const styles = ['bg-style-5'];
+                const styles = ['bg-style-1', 'bg-style-2', 'bg-style-3', 'bg-style-4', 'bg-style-5'];
                 const randomStyle = styles[Math.floor(Math.random() * styles.length)];
                 bgTextElement.classList.add(randomStyle);
                 
@@ -586,8 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 创建副标题打字机
             const subtitleTyper = new TypeWriter(typedSubtitleElement, {
-                typingSpeed: { min: 60, max: 120 },
-                deleteSpeed: { min: 30, max: 80 },
+                typingSpeed: { min: 60, max: 100 },
+                deleteSpeed: { min: 10, max: 25 },
                 waitForEnter: true,
                 onTypingComplete: () => {
                     // 当副标题打字完成后，激活终端

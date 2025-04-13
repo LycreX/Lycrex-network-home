@@ -45,7 +45,6 @@ pub async fn process_command_with_auth(
         debug!("检查token: '{}'", t);
         if authenticate::validate_token(t, client_ip) {
             is_authenticated = true;
-            debug!("Token验证通过");
         } else {
             debug!("Token验证失败");
         }

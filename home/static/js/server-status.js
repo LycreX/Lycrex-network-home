@@ -160,28 +160,35 @@ function setRandomBlinkAnimation(element) {
 
 async function updateServerStatus() {
     const serverStatusContainer = document.getElementById('server-status');
-    serverStatusContainer.innerHTML = '';
+    
+    // 初始化时创建服务器状态元素
+    if (serverStatusContainer.children.length === 0) {
+        for (const [index, server] of servers.entries()) {
+            const serverId = `server-${index}`;
+            const serverElement = document.createElement('p');
+            serverElement.id = serverId;
+            serverElement.innerHTML = `<span class="status-indicator"></span>${server.name}`;
+            serverStatusContainer.appendChild(serverElement);
+        }
 
+        // 仅在初始化时添加淡入效果
+        if (!serverStatusContainer.classList.contains('fade-in')) {
+            serverStatusContainer.style.opacity = '0';
+            serverStatusContainer.classList.add('fade-in');
+            setTimeout(() => {
+                serverStatusContainer.style.transition = 'opacity 0.5s ease-in-out';
+                serverStatusContainer.style.opacity = '1';
+            }, 100);
+        }
+    }
+
+    // 仅更新状态
     for (const [index, server] of servers.entries()) {
         const serverId = `server-${index}`;
-        const serverElement = document.createElement('p');
-        serverElement.id = serverId;
-        serverElement.innerHTML = `<span class="status-indicator"></span>${server.name}`;
-        serverStatusContainer.appendChild(serverElement);
-
         const statusData = await fetchServerStatus(server);
         updateStatusIndicator(serverId, statusData);
     }
-
-    if (!serverStatusContainer.classList.contains('fade-in')) {
-        serverStatusContainer.style.opacity = '0';
-        serverStatusContainer.classList.add('fade-in');
-        setTimeout(() => {
-            serverStatusContainer.style.transition = 'opacity 0.5s ease-in-out';
-            serverStatusContainer.style.opacity = '1';
-        }, 100);
-    }
 }
 
-setInterval(updateServerStatus, 1800000); // 每 半小时 更新一次服务器状态
+setInterval(updateServerStatus, 1800000); // 每 30 分钟 更新一次服务器状态
 updateServerStatus();
