@@ -4,6 +4,7 @@ use axum::{
     Json,
     extract::ConnectInfo,
     http::HeaderMap,
+    response::IntoResponse,
 };
 use rimplog::debug;
 use serde_json::json;
@@ -25,6 +26,7 @@ pub fn api_routes() -> Router {
         .route("/command", post(command_handler))
         .route("/authenticate", post(authenticate_handler))
         .route("/debug/tokens", get(list_tokens_handler))
+        .route("/ping", get(ping_handler))
 }
 
 async fn status_handler() -> Json<serde_json::Value> {
@@ -244,4 +246,9 @@ async fn list_tokens_handler() -> Json<serde_json::Value> {
         "total_tokens": tokens.len(),
         "tokens": token_objects
     }))
+}
+
+// 简单的ping处理器，用于测量网络延迟
+async fn ping_handler() -> impl IntoResponse {
+    "pong"
 }

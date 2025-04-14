@@ -1,6 +1,9 @@
 // Fetch and display visitor statistics
 async function fetchVisitorStats() {
     try {
+        // 测量ping延迟
+        const pingLatency = await measurePingLatency();
+        
         const statusResponse = await fetch('/api/status');
         const statusData = await statusResponse.json();
         
@@ -67,6 +70,10 @@ async function fetchVisitorStats() {
             }
         }
         
+        // Add server latency display
+        if (hasContent) statsHtml += ' | ';
+        statsHtml += `<span>${pingLatency} ms</span>`;
+        
         visitorStatsElement.innerHTML = statsHtml;
         visitorStatsElement.style.display = 'block';
     } catch (error) {
@@ -106,5 +113,53 @@ async function reportVisit(ipAddress) {
     } catch (error) {
         console.error('report visit failed:', error);
         return { success: false, message: 'report visit failed', visits: 0 };
+    }
+}
+
+// 测量ping延迟
+async function measurePingLatency() {
+    try {
+        // 执行3次测量取平均值
+        const samples = 3;
+        let totalLatency = 0;
+        
+        for (let i = 0; i < samples; i++) {
+            const latency = await singlePingMeasurement();
+            totalLatency += latency;
+            
+            // 短暂延迟避免请求堆叠
+            if (i < samples - 1) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+        
+        // 计算平均延迟并四舍五入到整数
+        return Math.round(totalLatency / samples);
+    } catch (error) {
+        console.error('Failed to measure ping latency:', error);
+        return 0;
+    }
+}
+
+// 单次ping测量
+async function singlePingMeasurement() {
+    // 使用performance API更精确地测量时间
+    const start = performance.now();
+    
+    try {
+        // 使用fetch API，无需解析响应
+        const response = await fetch('/api/ping', {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store',
+                'Pragma': 'no-cache'
+            }
+        });
+        
+        const end = performance.now();
+        return end - start;
+    } catch (e) {
+        return 0;
     }
 } 

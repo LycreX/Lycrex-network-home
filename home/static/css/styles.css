@@ -201,3 +201,25 @@ body {
 .server-group p:hover {
     background: rgba(255, 255, 255, 0.1);
 }
+
+/* 服务器延迟样式 */
+.server-name {
+    margin-right: 5px;
+}
+
+.server-latency {
+    font-size: 0.75rem;
+    margin-left: 5px;
+}
+
+.latency-excellent { color: #1a9850; font-weight: bold; }
+
+.latency-good { color: #66bd63; }
+
+.latency-average { color: #fee08b; }
+
+.latency-poor { color: #fdae61; }
+
+.latency-bad { color: #d73027; }
+
+.latency-timeout { color: #a50026; font-weight: bold; }
