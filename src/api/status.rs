@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
 use std::sync::{OnceLock, Mutex};
 use crate::config::get_server_config;
-use crate::api::visitor::get_visitor_stats;
+use crate::db;
 use rimplog::info;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -184,10 +184,13 @@ pub async fn get_status() -> StatusResponse {
     
     // 获取访问者统计
     let visitor_stats = if get_server_config().show_visitor_stats.enabled {
-        let stats = get_visitor_stats();
+        // 使用数据库API获取访问统计
+        let total_visits = db::get_total_visits().unwrap_or(0);
+        let unique_ips = db::get_unique_ip_count().unwrap_or(0);
+        
         let visitor_stats = VisitorStats {
-            total_visits: stats.total_visits(),
-            unique_ips: stats.unique_ip_count(),
+            total_visits,
+            unique_ips,
         };
         Some(visitor_stats)
     } else {

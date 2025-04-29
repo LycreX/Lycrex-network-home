@@ -47,11 +47,11 @@ async function fetchVisitorStats() {
         // Get current IP visit count (if configuration allows)
         if (showPersonal) {
             try {
-                // get visitor IP address
-                const ipAddress = await getVisitorIpAddress();
+                // get visitor IP address and geo info
+                const visitorInfo = await getVisitorInfo();
                 
                 // report visit information
-                const reportResponse = await reportVisit(ipAddress);
+                const reportResponse = await reportVisit(visitorInfo);
                 
                 if (hasContent) {
                     statsHtml += ' | ';
@@ -59,9 +59,10 @@ async function fetchVisitorStats() {
                 
                 // show visit count
                 if (reportResponse.success) {
-                    statsHtml += `<span>You(${ipAddress}) visited: ${reportResponse.visits} times</span>`;
+                    // 显示访问信息，只使用 IP 地址
+                    statsHtml += `<span>You(${visitorInfo.ipAddress}) visited: ${reportResponse.visits} times</span>`;
                 } else {
-                    statsHtml += `<span>You(${ipAddress})'s visit statistics are not available</span>`;
+                    statsHtml += `<span>You(${visitorInfo.ipAddress})'s visit statistics are not available</span>`;
                 }
             } catch (error) {
                 console.error('Failed to get/report visit statistics:', error);
@@ -86,27 +87,47 @@ document.addEventListener('DOMContentLoaded', fetchVisitorStats);
 
 setInterval(fetchVisitorStats, 60000); 
 
-// get visitor IP address
-async function getVisitorIpAddress() {
+// get visitor IP address and geo information
+async function getVisitorInfo() {
     try {
         const response = await fetch('https://api.db-ip.com/v2/free/self');
         const data = await response.json();
-        return data.ipAddress;
-    } catch (secondError) {
+        
+        // 返回完整的地理位置信息
+        return {
+            ipAddress: data.ipAddress,
+            continentCode: data.continentCode,
+            continentName: data.continentName,
+            countryCode: data.countryCode,
+            countryName: data.countryName,
+            stateProv: data.stateProv,
+            city: data.city
+        };
+    } catch (error) {
+        console.error('Failed to get visitor info:', error);
+        // 返回默认值，仅包含IP地址
         const randomIP = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
-        return randomIP;
+        return { ipAddress: randomIP };
     }
 }
 
-// report visit information
-async function reportVisit(ipAddress) {
+// report visit information with geo data
+async function reportVisit(visitorInfo) {
     try {
         const response = await fetch('/api/report-visitor', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ ip: ipAddress }),
+            body: JSON.stringify({
+                ip: visitorInfo.ipAddress,
+                continent_code: visitorInfo.continentCode,
+                continent_name: visitorInfo.continentName,
+                country_code: visitorInfo.countryCode,
+                country_name: visitorInfo.countryName,
+                state_prov: visitorInfo.stateProv,
+                city: visitorInfo.city
+            }),
         });
         
         return await response.json();

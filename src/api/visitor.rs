@@ -1,60 +1,19 @@
-use std::sync::{Arc, Mutex, OnceLock};
-use std::collections::{HashSet, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 use axum::http::Request;
 use axum::extract::ConnectInfo;
 use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};
-use std::fs;
 use rimplog::info;
 use regex;
 use tokio::time::{interval, Duration};
-use std::sync::atomic::{AtomicBool, Ordering};
-
-// 访问者统计数据
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct VisitorStats {
-    total_visits: u64,
-    unique_ips: HashSet<String>,
-    // 记录每个IP的访问次数
-    ip_visits: HashMap<String, u64>,
-}
-
-impl VisitorStats {
-    pub fn unique_ip_count(&self) -> usize {
-        self.unique_ips.len()
-    }
-    
-    pub fn total_visits(&self) -> u64 {
-        self.total_visits
-    }
-    
-    #[allow(dead_code)]
-    pub fn ip_visits(&self) -> &HashMap<String, u64> {
-        &self.ip_visits
-    }
-    
-    // 获取指定IP的访问次数
-    pub fn get_ip_visit_count(&self, ip: &str) -> u64 {
-        *self.ip_visits.get(ip).unwrap_or(&0)
-    }
-}
-
-// 访问者统计单例
-static VISITOR_STATS: OnceLock<Arc<Mutex<VisitorStats>>> = OnceLock::new();
+use crate::db;
 
 // 定时保存任务状态
 static TIMER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // 初始化访问者统计
 pub fn init_visitor_stats() {
-    let stats = if let Ok(content) = fs::read_to_string("visitor_stats.json") {
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        VisitorStats::default()
-    };
-    
-    VISITOR_STATS.get_or_init(|| Arc::new(Mutex::new(stats)));
-    info!("访问者统计已初始化");
+    info!("访问者统计已初始化（使用数据库存储）");
 }
 
 // 启动定时保存功能
@@ -74,47 +33,20 @@ pub fn start_periodic_save(interval_secs: u64) {
         loop {
             // 等待下一个间隔
             interval_timer.tick().await;
-            
-            // 保存访问者统计数据
-            save_visitor_stats();
-            info!("已定时保存访问者统计数据");
+            info!("数据库已自动持久化访问者统计数据");
         }
     });
 }
 
-// 获取访问者统计
-pub fn get_visitor_stats() -> VisitorStats {
-    let stats = VISITOR_STATS.get()
-        .expect("访问者统计未初始化")
-        .lock()
-        .expect("无法获取访问者统计锁");
-    
-    VisitorStats {
-        total_visits: stats.total_visits,
-        unique_ips: stats.unique_ips.clone(),
-        ip_visits: stats.ip_visits.clone(),
-    }
-}
-
-// 保存访问者统计到文件
-fn save_visitor_stats() {
-    if let Some(stats_lock) = VISITOR_STATS.get() {
-        if let Ok(stats) = stats_lock.lock() {
-            if let Ok(json) = serde_json::to_string_pretty(&*stats) {
-                let _ = fs::write("visitor_stats.json", json);
-            }
-        }
-    }
-}
-
-// 获取访问者统计API
+// 访问者统计API
 #[allow(dead_code)]
 pub async fn get_visitor_stats_handler() -> axum::Json<VisitorStatsResponse> {
-    let stats = get_visitor_stats();
+    let total_visits = db::get_total_visits().unwrap_or(0);
+    let unique_ips = db::get_unique_ip_count().unwrap_or(0);
     
     axum::Json(VisitorStatsResponse {
-        total_visits: stats.total_visits,
-        unique_ips: stats.unique_ip_count(),
+        total_visits,
+        unique_ips,
     })
 }
 
@@ -124,10 +56,9 @@ pub struct VisitorStatsResponse {
     unique_ips: usize,
 }
 
-// 导出保存访问者统计的函数
+// 保存访问者统计
 pub fn save_stats() {
-    save_visitor_stats();
-    info!("已保存访问者统计数据");
+    info!("数据库已保存访问者统计数据");
 }
 
 // 获取单个IP访问次数API
@@ -136,7 +67,78 @@ pub async fn get_current_ip_visits(
     req: Request<axum::body::Body>
 ) -> axum::Json<CurrentIpVisitResponse> {
     // 获取客户端IP
-    let ip = if let Some(x_forwarded_for) = req.headers().get("x-forwarded-for") {
+    let ip = extract_ip_from_request(&req);
+    
+    // 获取IP访问次数
+    let visit_count = db::get_ip_visit_count(&ip).unwrap_or(0);
+    
+    axum::Json(CurrentIpVisitResponse {
+        ip,
+        visits: visit_count,
+    })
+}
+
+// 获取IP详细访问信息API
+#[allow(dead_code)]
+pub async fn get_ip_visit_detail_handler(
+    req: Request<axum::body::Body>
+) -> axum::Json<IpVisitDetailResponse> {
+    // 获取客户端IP
+    let ip = extract_ip_from_request(&req);
+    
+    // 获取IP详细信息
+    match db::get_ip_visit_detail(&ip) {
+        Ok(Some(detail)) => {
+            axum::Json(IpVisitDetailResponse {
+                success: true,
+                ip: detail.ip,
+                visits: detail.visit_count,
+                continent_code: detail.continent_code,
+                continent_name: detail.continent_name,
+                country_code: detail.country_code,
+                country_name: detail.country_name,
+                state_prov: detail.state_prov,
+                city: detail.city,
+                last_visit: detail.last_visit,
+                message: None,
+            })
+        },
+        Ok(None) => {
+            axum::Json(IpVisitDetailResponse {
+                success: false,
+                ip,
+                visits: 0,
+                continent_code: None,
+                continent_name: None,
+                country_code: None,
+                country_name: None,
+                state_prov: None,
+                city: None,
+                last_visit: 0,
+                message: Some("IP记录不存在".to_string()),
+            })
+        },
+        Err(e) => {
+            axum::Json(IpVisitDetailResponse {
+                success: false,
+                ip,
+                visits: 0,
+                continent_code: None,
+                continent_name: None,
+                country_code: None,
+                country_name: None,
+                state_prov: None,
+                city: None,
+                last_visit: 0,
+                message: Some(format!("获取IP详细信息失败: {}", e)),
+            })
+        }
+    }
+}
+
+// 从请求中提取IP
+fn extract_ip_from_request(req: &Request<axum::body::Body>) -> String {
+    if let Some(x_forwarded_for) = req.headers().get("x-forwarded-for") {
         if let Ok(ip_str) = x_forwarded_for.to_str() {
             ip_str.split(',').next().unwrap_or("unknown").trim().to_string()
         } else {
@@ -146,16 +148,7 @@ pub async fn get_current_ip_visits(
         socket_addr.0.ip().to_string()
     } else {
         "unknown".to_string()
-    };
-    
-    // 获取IP访问次数
-    let stats = get_visitor_stats();
-    let visit_count = stats.get_ip_visit_count(&ip);
-    
-    axum::Json(CurrentIpVisitResponse {
-        ip,
-        visits: visit_count,
-    })
+    }
 }
 
 #[derive(Serialize)]
@@ -164,11 +157,26 @@ pub struct CurrentIpVisitResponse {
     visits: u64,
 }
 
+#[derive(Serialize)]
+pub struct IpVisitDetailResponse {
+    success: bool,
+    ip: String,
+    visits: u64,
+    continent_code: Option<String>,
+    continent_name: Option<String>,
+    country_code: Option<String>,
+    country_name: Option<String>,
+    state_prov: Option<String>,
+    city: Option<String>,
+    last_visit: u64,
+    message: Option<String>,
+}
+
 // 创建一个新的端点，让客户端上报自己的IP
 pub async fn report_visitor_ip(req: axum::Json<VisitorReportRequest>) -> axum::Json<VisitorReportResponse> {
     let ip = req.ip.clone();
     
-    // 验证IP格式（简单验证）
+    // 验证IP格式
     if !is_valid_ip(&ip) {
         return axum::Json(VisitorReportResponse {
             success: false,
@@ -178,43 +186,41 @@ pub async fn report_visitor_ip(req: axum::Json<VisitorReportRequest>) -> axum::J
     }
     
     // 更新访问统计
-    if let Some(stats_lock) = VISITOR_STATS.get() {
-        if let Ok(mut stats) = stats_lock.lock() {
-            stats.total_visits += 1;
-            
-            stats.unique_ips.insert(ip.clone());
-            
-            // 增加IP访问计数
-            let count = stats.ip_visits.entry(ip.clone()).or_insert(0);
-            *count += 1;
-            
-            // 保存当前访问次数
-            let visit_count = *count;
-            
-            // 每10次访问保存一次数据
-            if stats.total_visits % 10 == 0 {
-                drop(stats); // 释放锁后保存
-                save_visitor_stats();
+    match db::increment_total_visits() {
+        Ok(_) => {
+            // 增加IP访问计数并更新地理位置信息
+            match db::increment_ip_visit(
+                &ip,
+                req.continent_code.as_deref(),
+                req.continent_name.as_deref(),
+                req.country_code.as_deref(),
+                req.country_name.as_deref(),
+                req.state_prov.as_deref(),
+                req.city.as_deref()
+            ) {
+                Ok(visit_count) => {
+                    axum::Json(VisitorReportResponse {
+                        success: true,
+                        message: "访问已记录".to_string(),
+                        visits: visit_count,
+                    })
+                },
+                Err(e) => {
+                    axum::Json(VisitorReportResponse {
+                        success: false,
+                        message: format!("更新IP访问次数失败: {}", e),
+                        visits: 0,
+                    })
+                }
             }
-            
-            axum::Json(VisitorReportResponse {
-                success: true,
-                message: "访问已记录".to_string(),
-                visits: visit_count,
-            })
-        } else {
+        },
+        Err(e) => {
             axum::Json(VisitorReportResponse {
                 success: false,
-                message: "无法获取访问统计锁".to_string(),
+                message: format!("更新总访问次数失败: {}", e),
                 visits: 0,
             })
         }
-    } else {
-        axum::Json(VisitorReportResponse {
-            success: false,
-            message: "访问统计未初始化".to_string(),
-            visits: 0,
-        })
     }
 }
 
@@ -244,6 +250,12 @@ fn is_valid_ip(ip: &str) -> bool {
 #[derive(Deserialize)]
 pub struct VisitorReportRequest {
     ip: String,
+    continent_code: Option<String>,
+    continent_name: Option<String>,
+    country_code: Option<String>,
+    country_name: Option<String>,
+    state_prov: Option<String>,
+    city: Option<String>,
 }
 
 #[derive(Serialize)]

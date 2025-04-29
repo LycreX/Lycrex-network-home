@@ -3,3 +3,4 @@
 .DS_Store
 config.toml
 visitor_stats.json
+data/app.db

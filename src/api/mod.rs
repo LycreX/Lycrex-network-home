@@ -3,7 +3,7 @@ use axum::{
     Router,
     Json,
     extract::ConnectInfo,
-    http::HeaderMap,
+    http::{HeaderMap, Request},
     response::IntoResponse,
 };
 use rimplog::debug;
@@ -35,20 +35,25 @@ async fn status_handler() -> Json<serde_json::Value> {
 }
 
 async fn visitor_handler() -> Json<serde_json::Value> {
-    let stats = visitor::get_visitor_stats();
+    // 使用数据库API获取访问统计
+    let total_visits = crate::db::get_total_visits().unwrap_or(0);
+    let unique_ips = crate::db::get_unique_ip_count().unwrap_or(0);
+    
     Json(json!({
-        "total_visits": stats.total_visits(),
-        "unique_ips": stats.unique_ip_count()
+        "total_visits": total_visits,
+        "unique_ips": unique_ips
     }))
 }
 
 async fn current_ip_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Json<serde_json::Value> {
     let ip = addr.ip().to_string();
-    let stats = visitor::get_visitor_stats();
+    
+    // 使用数据库API获取IP访问次数
+    let visits = crate::db::get_ip_visit_count(&ip).unwrap_or(0);
     
     Json(json!({
         "ip": ip,
-        "visits": stats.get_ip_visit_count(&ip)
+        "visits": visits
     }))
 }
 

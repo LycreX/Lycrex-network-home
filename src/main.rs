@@ -2,10 +2,12 @@ mod log;
 mod api;
 mod static_files;
 mod config;
+mod db;
 use log::init_log;
 use config::{init_config, get_server_config, start_config_watcher};
 use api::status::init_server_config;
 use api::visitor::{init_visitor_stats, save_stats, start_periodic_save};
+use db::init_db;
 
 use rimplog::info;
 use std::sync::Arc;
@@ -34,6 +36,11 @@ async fn main() {
 
     // 初始化服务器配置
     init_server_config();
+    
+    // 初始化数据库
+    if let Err(e) = init_db("data/app.db") {
+        panic!("数据库初始化失败: {}", e);
+    }
     
     // 初始化访问统计
     init_visitor_stats();

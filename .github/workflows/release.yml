@@ -56,13 +56,36 @@ jobs:
       - name: Get commit messages
         id: get_commits
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          # 确保获取完整的标签和历史
+          git fetch --prune --unshallow --tags
+          
+          # 获取当前标签
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          
+          # 获取所有标签并按版本排序
+          ALL_TAGS=$(git tag -l --sort=-v:refname)
+          
+          # 查找当前标签之前的标签
+          PREVIOUS_TAG=""
+          FOUND_CURRENT=false
+          for tag in $ALL_TAGS; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              PREVIOUS_TAG=$tag
+              break
+            fi
+            if [ "$tag" = "$CURRENT_TAG" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+          
+          echo "当前标签: $CURRENT_TAG, 上一个标签: $PREVIOUS_TAG"
+          
           if [ -z "$PREVIOUS_TAG" ]; then
             # 如果没有之前的标签，获取所有提交
-            COMMITS=$(git log --pretty=format:"* %s (%h)" HEAD)
+            COMMITS=$(git log --pretty=format:"* %s (%h)" $CURRENT_TAG)
           else
             # 获取从上一个标签到当前标签的所有提交
-            COMMITS=$(git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..HEAD)
+            COMMITS=$(git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..$CURRENT_TAG)
           fi
           echo "COMMITS<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
