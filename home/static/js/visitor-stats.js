@@ -1,3 +1,29 @@
+// 存储用户访问信息的全局变量
+let visitorData = {
+    ipAddress: '',
+    visits: 0,
+    reported: false
+};
+
+// 只在页面加载时执行一次的上报访问函数
+async function reportVisitOnce() {
+    try {
+        // 获取访问者IP和地理信息
+        const visitorInfo = await getVisitorInfo();
+        visitorData.ipAddress = visitorInfo.ipAddress;
+        
+        // 上报访问信息
+        const reportResponse = await reportVisit(visitorInfo);
+        
+        if (reportResponse.success) {
+            visitorData.visits = reportResponse.visits;
+            visitorData.reported = true;
+        }
+    } catch (error) {
+        console.error('Failed to report visitor data:', error);
+    }
+}
+
 // Fetch and display visitor statistics
 async function fetchVisitorStats() {
     try {
@@ -44,30 +70,15 @@ async function fetchVisitorStats() {
             hasContent = true;
         }
         
-        // Get current IP visit count (if configuration allows)
+        // 显示个人访问次数（如果配置允许）
         if (showPersonal) {
-            try {
-                // get visitor IP address and geo info
-                const visitorInfo = await getVisitorInfo();
-                
-                // report visit information
-                const reportResponse = await reportVisit(visitorInfo);
-                
-                if (hasContent) {
-                    statsHtml += ' | ';
-                }
-                
-                // show visit count
-                if (reportResponse.success) {
-                    // 显示访问信息，只使用 IP 地址
-                    statsHtml += `<span>You(${visitorInfo.ipAddress}) visited: ${reportResponse.visits} times</span>`;
-                } else {
-                    statsHtml += `<span>You(${visitorInfo.ipAddress})'s visit statistics are not available</span>`;
-                }
-            } catch (error) {
-                console.error('Failed to get/report visit statistics:', error);
-                if (hasContent) statsHtml += ' | ';
-                statsHtml += `<span>Failed to get visit statistics</span>`;
+            if (hasContent) statsHtml += ' | ';
+            
+            if (visitorData.reported) {
+                // 使用已上报的数据
+                statsHtml += `<span>You(${visitorData.ipAddress}) visited: ${visitorData.visits} times</span>`;
+            } else {
+                statsHtml += `<span>Visit statistics loading...</span>`;
             }
         }
         
@@ -82,10 +93,20 @@ async function fetchVisitorStats() {
     }
 }
 
-// Get visitor statistics after page loads
-document.addEventListener('DOMContentLoaded', fetchVisitorStats);
+// 页面加载后执行的初始化函数
+async function initializeVisitorStats() {
+    // 首先上报访问信息（仅执行一次）
+    await reportVisitOnce();
+    
+    // 然后获取并显示统计信息
+    await fetchVisitorStats();
+    
+    // 设置定时刷新统计信息（不再包含上报功能）
+    setInterval(fetchVisitorStats, 60000);
+}
 
-setInterval(fetchVisitorStats, 60000); 
+// 页面加载后执行初始化
+document.addEventListener('DOMContentLoaded', initializeVisitorStats);
 
 // get visitor IP address and geo information
 async function getVisitorInfo() {
