@@ -3,6 +3,8 @@ mod api;
 mod static_files;
 mod config;
 mod db;
+mod profile;
+
 use log::init_log;
 use config::{init_config, get_server_config, start_config_watcher};
 use api::status::init_server_config;
@@ -14,19 +16,38 @@ use std::sync::Arc;
 use tokio::signal;
 
 use axum::{
-    routing::get,
+    routing::{get, post},
     Router,
     response::Html,
+    extract::Extension,
 };
 use tokio::net::TcpListener;
 use std::net::SocketAddr;
 use tower_http::cors::{CorsLayer, Any};
+use std::sync::Mutex;
+use reqwest::Client;
+use tower_cookies::CookieManagerLayer;
+use profile::models::ProcessedCodes;
 
 // 在编译时嵌入 HTML 文件
 const INDEX_HTML: &str = include_str!("../home/index.html");
 
 #[tokio::main]
 async fn main() {
+    // 初始化应用
+    init_application().await;
+    
+    // 创建并运行服务器
+    let app = create_router();
+    let addr = SocketAddr::from(([127, 0, 0, 1], get_server_config().port));
+    info!("服务器运行在: http://{}", addr);
+    
+    // 运行服务器直到接收到关闭信号
+    run_server(app, addr).await;
+}
+
+// 初始化应用程序
+async fn init_application() {
     init_log();
     
     // 初始化配置
@@ -52,24 +73,51 @@ async fn main() {
     if let Err(e) = start_config_watcher() {
         info!("启动配置文件监听失败: {}", e);
     }
-    
+}
+
+// 创建应用路由
+fn create_router() -> Router {
     // 配置 CORS
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
     
+    // 创建HTTP客户端用于API请求
+    let client = Client::new();
+    let client_state = Arc::new(client);
+    
+    // 创建处理过的授权码存储
+    let processed_codes = Arc::new(Mutex::new(ProcessedCodes::new()));
+    
     // 创建路由
-    let app = Router::new()
+    Router::new()
         .route("/", get(handler))
         .route("/static/*path", get(static_files::serve_static_file))
         .nest("/api", api::api_routes())
-        .layer(cors);
 
-    let port = get_server_config().port;
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    info!("服务器运行在: http://{}", addr);
+        // Profile模块路由 - 按照原始结构嵌套
+        .nest("/auth", Router::new()
+            .route("/", get(profile::handlers::index))
+            .route("/callback", get(profile::handlers::oauth_callback_page))
+            .route("/callback/process", get(profile::handlers::oauth_callback_process))
+        )
+        .nest("/profile", Router::new()
+            .route("/", get(profile::handlers::profile))
+            .route("/logout", get(profile::handlers::logout))
+            .route("/api/userinfo", get(profile::handlers::get_user_info_api))
+            .route("/api/user/login-stats", get(profile::handlers::get_login_stats_api))
+            .route("/api/upload-avatar", post(profile::handlers::upload_avatar))
+        )
+        // 全局状态
+        .layer(Extension(client_state))
+        .layer(Extension(processed_codes))
+        .layer(CookieManagerLayer::new())
+        .layer(cors)
+}
 
+// 运行服务器并处理关闭信号
+async fn run_server(app: Router, addr: SocketAddr) {
     // 注册关闭信号处理
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let tx = Arc::new(std::sync::Mutex::new(Some(tx)));

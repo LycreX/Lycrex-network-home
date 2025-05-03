@@ -258,6 +258,7 @@ pub fn get_ip_visit_count(ip: &str) -> SqliteResult<u64> {
 }
 
 // 获取所有IP访问记录
+#[allow(unused)]
 pub fn get_all_ip_visits() -> SqliteResult<Vec<(String, u64)>> {
     let conn = get_db_conn();
     let conn = conn.lock().expect("无法获取数据库锁");
@@ -309,6 +310,7 @@ pub fn get_ip_visit_detail(ip: &str) -> SqliteResult<Option<IpVisitRecord>> {
 }
 
 // 获取所有IP访问详细记录
+#[allow(unused)]
 pub fn get_all_ip_visit_details() -> SqliteResult<Vec<IpVisitRecord>> {
     let conn = get_db_conn();
     let conn = conn.lock().expect("无法获取数据库锁");

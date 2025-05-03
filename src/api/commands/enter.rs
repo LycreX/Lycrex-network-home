@@ -2,13 +2,13 @@ use async_trait::async_trait;
 use super::{Command, CommandContext, CommandResponse, CommandAction, unauthorized_response};
 
 // 定义所有可跳转的目标 (目标名, 描述, URL, 是否需要认证)
-const TARGETS: [(&str, &str, &str, bool); 4] = [
+const TARGETS: [(&str, &str, &str, bool); 5] = [
     // (目标名, 描述, URL, 是否需要认证)
+    ("me", "个人中心", "https://lycrex.com/profile", false),
     ("home", "首页", "https://lycrex.com", false),
     ("git", "Git仓库", "https://git.lycrex.com", false),
     ("tv", "SyncTV", "https://tv.lycrex.com", false),
     ("pan", "网盘", "https://pan.lycrex.com", false),
-
 ];
 
 pub struct EnterCommand {}

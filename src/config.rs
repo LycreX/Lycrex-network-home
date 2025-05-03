@@ -33,6 +33,14 @@ pub struct AuthConfig {
     pub token_expiration_seconds: u64,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OAuthConfig {
+    pub auth_server_url: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String,
+}
+
 impl Default for VisitorStatsConfig {
     fn default() -> Self {
         Self {
@@ -49,6 +57,17 @@ impl Default for AuthConfig {
         Self {
             password: "123".to_string(),
             token_expiration_seconds: 3600,
+        }
+    }
+}
+
+impl Default for OAuthConfig {
+    fn default() -> Self {
+        Self {
+            auth_server_url: get_env_or_default("AUTH_SERVER_URL", "http://127.0.0.1:8080"),
+            client_id: get_env_or_default("CLIENT_ID", "profile-client"),
+            client_secret: get_env_or_default("CLIENT_SECRET", "profile-secret"),
+            redirect_uri: get_env_or_default("REDIRECT_URI", "http://localhost:3000/auth/callback"),
         }
     }
 }
@@ -71,12 +90,14 @@ impl Default for ServerConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     pub server: ServerConfig,
+    pub oauth: OAuthConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             server: ServerConfig::default(),
+            oauth: OAuthConfig::default(),
         }
     }
 }
@@ -85,6 +106,11 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 
 // 添加一个全局变量来记录上次配置文件更新时间
 static LAST_CONFIG_UPDATE: OnceLock<Mutex<SystemTime>> = OnceLock::new();
+
+// 获取环境变量，如果不存在则使用默认值
+pub fn get_env_or_default(key: &str, default: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
 
 pub fn init_config() -> Result<(), config::ConfigError> {
     let config_path = "config.toml";
@@ -122,6 +148,10 @@ pub fn get_config() -> &'static Config {
 
 pub fn get_server_config() -> &'static ServerConfig {
     &get_config().server
+}
+
+pub fn get_oauth_config() -> &'static OAuthConfig {
+    &get_config().oauth
 }
 
 // 获取认证配置，从status模块中获取最新配置
@@ -193,6 +223,11 @@ pub fn start_config_watcher() -> notify::Result<()> {
                                 
                                 // 更新服务器状态
                                 update_server_status(server_config);
+                                
+                                // 记录OAuth配置更新信息
+                                info!("OAuth配置已更新: auth_server_url={}, client_id={}", 
+                                      new_config.oauth.auth_server_url,
+                                      new_config.oauth.client_id);
                             },
                             Err(e) => {
                                 info!("重新加载配置失败: {}", e);

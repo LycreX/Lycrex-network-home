@@ -17,6 +17,7 @@ pub fn init_visitor_stats() {
 }
 
 // 启动定时保存功能
+#[allow(dead_code)]
 pub fn start_periodic_save(interval_secs: u64) {
     // 防止重复启动
     if TIMER_RUNNING.swap(true, Ordering::SeqCst) {

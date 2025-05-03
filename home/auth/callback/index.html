@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录中 - 个人资料</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000000;
+            text-align: center;
+            color: #ffffff;
+        }
+        .loading-container {
+            background-color: #0c0c0c;
+            padding: 3rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid #333333;
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 {
+            color: #ffffff;
+            margin-bottom: 1.5rem;
+        }
+        .loader {
+            border: 5px solid #222222;
+            border-top: 5px solid #ffffff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: #f44336;
+            display: none;
+            margin-top: 1rem;
+            font-weight: bold;
+        }
+        p {
+            color: #cccccc;
+            margin-bottom: 15px;
+        }
+        a {
+            color: #ffffff;
+            text-decoration: none;
+            border-bottom: 1px dotted #ffffff;
+        }
+        a:hover {
+            border-bottom: 1px solid #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <h2 id="status-message">登录验证中...</h2>
+        <div class="loader" id="loader"></div>
+        <p id="message">正在验证您的登录信息，请稍候...</p>
+        <p id="error" class="error"></p>
+        <p>如果页面没有自动跳转，请<a href="/profile">点击这里</a></p>
+    </div>
+
+    <script>
+        // 获取URL中的查询参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
+        
+        // 如果有错误参数，显示错误信息
+        if (error) {
+            document.getElementById('status-message').textContent = '登录验证失败';
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('message').textContent = '登录过程中发生错误，请重试';
+            
+            const errorMessages = {
+                'no_code': '未收到授权码，请重试',
+                'token_error': '获取授权令牌失败，请重试',
+                'userinfo_error': '获取用户信息失败，请重试'
+            };
+            
+            if (errorMessages[error]) {
+                document.getElementById('error').textContent = errorMessages[error];
+                document.getElementById('error').style.display = 'block';
+            }
+            
+            // 3秒后重定向到登录页
+            setTimeout(() => {
+                window.location.href = '/auth';
+            }, 3000);
+        } 
+        // 如果有授权码，验证登录
+        else if (code) {
+            // 将授权码发送到服务器，获取令牌
+            fetch(`/auth/callback/process?code=${code}`, {
+                method: 'GET',
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('status-message').textContent = '登录成功';
+                    document.getElementById('message').textContent = '登录验证成功，正在跳转...';
+                    
+                    // 重定向到profile页面
+                    setTimeout(() => {
+                        window.location.href = data.redirect || '/profile';
+                    }, 1500);
+                } else {
+                    document.getElementById('status-message').textContent = '登录验证失败';
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('message').textContent = '登录过程中发生错误，请重试';
+                    document.getElementById('error').textContent = data.error || '未知错误';
+                    document.getElementById('error').style.display = 'block';
+                    
+                    // 3秒后重定向到登录页
+                    setTimeout(() => {
+                        window.location.href = '/auth';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                document.getElementById('status-message').textContent = '登录验证失败';
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('message').textContent = '无法连接到服务器，请稍后再试';
+                document.getElementById('error').textContent = '网络错误';
+                document.getElementById('error').style.display = 'block';
+                
+                // 3秒后重定向到登录页
+                setTimeout(() => {
+                    window.location.href = '/auth';
+                }, 3000);
+            });
+        } else {
+            // 如果没有授权码，跳转到登录页
+            window.location.href = '/auth?error=no_code';
+        }
+    </script>
+</body>
+</html> 
