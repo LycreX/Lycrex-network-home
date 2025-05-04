@@ -3,7 +3,7 @@ use axum::{
     Router,
     Json,
     extract::ConnectInfo,
-    http::{HeaderMap, Request},
+    http::HeaderMap,
     response::IntoResponse,
 };
 use rimplog::debug;
