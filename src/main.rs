@@ -111,6 +111,7 @@ fn create_router() -> Router {
             .route("/api/notes", get(profile::handlers::get_user_notes_api))
             .route("/api/notes", post(profile::handlers::save_user_notes_api))
             .route("/api/change-password", put(profile::handlers::change_password_api))
+            .route("/api/change-username", put(profile::handlers::change_username_api))
         )
         // 全局状态
         .layer(Extension(client_state))

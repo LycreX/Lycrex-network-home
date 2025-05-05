@@ -2,7 +2,7 @@ use crate::config::get_oauth_config;
 use super::models::ProcessedCodes;
 use crate::profile::utils;
 use axum::{
-    extract::{Query, Multipart, State},
+    extract::{Query, Multipart},
     response::{Redirect, Json, IntoResponse},
     http::StatusCode,
     Extension,
@@ -12,7 +12,8 @@ use rimplog::{error, info};
 use serde_json::{self, json};
 use std::sync::{Arc, Mutex};
 use tower_cookies::{Cookie, Cookies};
-use crate::db::{self, get_user_note, save_user_note};
+use crate::db::{get_user_note, save_user_note};
+use std::time::Duration;
 
 type ClientState = Arc<reqwest::Client>;
 type ProcessedCodesState = Arc<Mutex<ProcessedCodes>>;
@@ -735,6 +736,177 @@ pub async fn change_password_api(
             error!("密码修改失败，状态码: {}", status);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
                 "error": "密码修改失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 修改用户名
+pub async fn change_username_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 使用全局配置
+    let oauth_config = get_oauth_config();
+    
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户ID
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(e) => {
+            error!("获取用户ID失败: {}", e);
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从请求体中获取新用户名
+    let new_username = match payload.get("username") {
+        Some(username) => match username.as_str() {
+            Some(text) => text,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "用户名必须是字符串"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含新用户名"
+            }))).into_response();
+        }
+    };
+
+    // 验证用户名长度和格式
+    if new_username.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({
+            "error": "用户名不能为空"
+        }))).into_response();
+    }
+
+    info!("准备修改用户 {} 的用户名为: {}", user_id, new_username);
+
+    // 构建发送到授权服务器的请求
+    // 根据API文档使用正确的接口路径
+    let username_change_url = format!("{}/api/users/{}/username", oauth_config.auth_server_url, user_id);
+    
+    let username_data = json!({
+        "username": new_username
+    });
+
+    info!("发送用户名修改请求到: {}", username_change_url);
+    info!("请求数据: {}", serde_json::to_string(&username_data).unwrap_or_default());
+
+    // 设置超时时间以避免无响应
+    // 发送用户名修改请求到授权服务器
+    let response = match client
+        .put(&username_change_url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .json(&username_data)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await {
+            Ok(resp) => resp,
+            Err(e) => {
+                error!("请求用户名修改失败: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": format!("请求用户名修改失败: {}", e)
+                }))).into_response();
+            }
+        };
+
+    // 处理响应
+    let status = response.status();
+    info!("用户名修改响应状态码: {}", status);
+    
+    // 尝试读取响应文本
+    let response_text = match response.text().await {
+        Ok(text) => {
+            if !text.is_empty() {
+                info!("用户名修改原始响应: {}", text);
+            } else {
+                info!("用户名修改响应为空");
+            }
+            text
+        },
+        Err(e) => {
+            error!("读取用户名修改响应失败: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("读取响应失败: {}", e)
+            }))).into_response();
+        }
+    };
+    
+    // 解析响应文本为JSON（如果可能）
+    let response_body = if response_text.is_empty() {
+        json!({})
+    } else {
+        match serde_json::from_str::<serde_json::Value>(&response_text) {
+            Ok(json_value) => json_value,
+            Err(e) => {
+                error!("解析用户名修改响应失败: {} (原始响应: {})", e, response_text);
+                json!({ "raw_response": response_text })
+            }
+        }
+    };
+
+    // 根据状态码返回对应响应
+    match status {
+        StatusCode::OK | StatusCode::CREATED | StatusCode::NO_CONTENT => {
+            info!("用户 {} 用户名修改成功为: {}", user_id, new_username);
+            (StatusCode::OK, Json(json!({
+                "status": "success",
+                "message": "用户名修改成功",
+                "username": new_username
+            }))).into_response()
+        },
+        StatusCode::BAD_REQUEST => {
+            let error_msg = response_body.get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("用户名验证失败");
+            
+            error!("用户名修改失败: {}", error_msg);
+            (StatusCode::BAD_REQUEST, Json(json!({
+                "error": error_msg
+            }))).into_response()
+        },
+        StatusCode::UNAUTHORIZED => {
+            error!("用户名修改认证失败");
+            (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "认证失败"
+            }))).into_response()
+        },
+        StatusCode::FORBIDDEN => {
+            error!("用户名修改权限不足");
+            (StatusCode::FORBIDDEN, Json(json!({
+                "error": "无权修改此用户名"
+            }))).into_response()
+        },
+        StatusCode::NOT_FOUND => {
+            error!("用户名修改目标未找到");
+            (StatusCode::NOT_FOUND, Json(json!({
+                "error": "未找到要修改的用户"
+            }))).into_response()
+        },
+        _ => {
+            let error_msg = response_body.get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("服务器错误");
+            
+            error!("用户名修改失败，状态码: {}, 错误: {}", status, error_msg);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": format!("用户名修改失败: {}", error_msg)
             }))).into_response()
         }
     }

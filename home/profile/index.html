@@ -50,6 +50,97 @@
         .card-notes {
             transition: all 0.3s ease;
         }
+        
+        /* 用户名编辑相关样式 */
+        .editable-name {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .editable-name:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 2px 8px;
+            margin: -2px -8px;
+        }
+        
+        .editable-name .edit-icon {
+            opacity: 0;
+            margin-left: 6px;
+            transition: opacity 0.2s ease;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .editable-name:hover .edit-icon {
+            opacity: 1;
+        }
+        
+        .username-edit-container {
+            display: none;
+            margin: 8px 0;
+        }
+        
+        .username-input {
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            padding: 8px 12px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            width: 100%;
+            margin-bottom: 8px;
+            outline: none;
+            font-family: var(--font-sans);
+            transition: all 0.2s ease;
+        }
+        
+        .username-input:focus {
+            border-color: #777;
+            background-color: #3a3a3a;
+        }
+        
+        .username-edit-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .username-btn {
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            outline: none;
+        }
+        
+        .username-save-btn {
+            background-color: #4285f4;
+            color: white;
+        }
+        
+        .username-save-btn:hover {
+            background-color: #3275e4;
+        }
+        
+        .username-save-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        .username-cancel-btn {
+            background-color: transparent;
+            color: #ccc;
+            border: 1px solid #555;
+        }
+        
+        .username-cancel-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
 
         /* 自定义滚动条样式 */
         .notes-textarea::-webkit-scrollbar {
@@ -355,7 +446,21 @@
                 </div>
             </div>
             <div>
-                <h2 id="user-name" class="user-name-large">Loading...</h2>
+                <h2 id="user-name" class="user-name-large editable-name">
+                    <span id="username-display">Loading...</span>
+                    <span class="edit-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                        </svg>
+                    </span>
+                </h2>
+                <div id="username-edit-container" class="username-edit-container">
+                    <input type="text" id="username-input" class="username-input" maxlength="30" placeholder="输入新用户名">
+                    <div class="username-edit-buttons">
+                        <button id="username-save" class="username-btn username-save-btn">保存</button>
+                        <button id="username-cancel" class="username-btn username-cancel-btn">取消</button>
+                    </div>
+                </div>
                 <p id="user-email" class="user-email-muted">Loading...</p>
             </div>
         </div>

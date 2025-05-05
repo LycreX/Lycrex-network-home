@@ -10,6 +10,7 @@ let lastServerUpdate = 0;
 let userIsEditing = false;
 let syncInterval;
 let passwordModalActive = false;
+let usernameEditActive = false;
 
 /**
  * 页面初始化
@@ -124,6 +125,7 @@ function initUI() {
     initNavbarScrollEffect();
     initAvatarUpload();
     initPageLoadAnimation();
+    initUsernameEdit();
 }
 
 /**
@@ -361,7 +363,7 @@ function updateUserInterface(user) {
     
     document.title = username ? username : '个人资料';
     
-    document.getElementById('user-name').textContent = username;
+    document.getElementById('username-display').textContent = username;
     document.getElementById('info-name').textContent = username;
     
     if (!dropdownUserName) dropdownUserName = document.getElementById('dropdown-user-name');
@@ -948,5 +950,192 @@ function initNotePinning() {
         setTimeout(() => {
             toast.classList.remove('show');
         }, 2000);
+    });
+}
+
+/**
+ * 用户名编辑功能
+ */
+function initUsernameEdit() {
+    const usernameDisplay = document.getElementById('username-display');
+    const editableNameContainer = document.querySelector('.editable-name');
+    const usernameEditContainer = document.getElementById('username-edit-container');
+    const usernameInput = document.getElementById('username-input');
+    const saveBtn = document.getElementById('username-save');
+    const cancelBtn = document.getElementById('username-cancel');
+    
+    if (!usernameDisplay || !usernameEditContainer || !usernameInput || !saveBtn || !cancelBtn) {
+        console.error('未找到用户名编辑所需的DOM元素');
+        return;
+    }
+    
+    // 显示编辑界面
+    function showEditMode() {
+        usernameEditActive = true;
+        editableNameContainer.style.display = 'none';
+        usernameEditContainer.style.display = 'block';
+        usernameInput.value = usernameDisplay.textContent.trim();
+        usernameInput.focus();
+        usernameInput.select();
+    }
+    
+    // 隐藏编辑界面
+    function hideEditMode() {
+        usernameEditActive = false;
+        editableNameContainer.style.display = 'flex';
+        usernameEditContainer.style.display = 'none';
+    }
+    
+    // 保存用户名
+    function saveUsername() {
+        const newUsername = usernameInput.value.trim();
+        
+        if (!newUsername) {
+            showToast('用户名不能为空', 'error');
+            return;
+        }
+        
+        // 如果用户名没有变化
+        if (newUsername === usernameDisplay.textContent.trim()) {
+            hideEditMode();
+            return;
+        }
+        
+        // 禁用保存按钮，防止重复提交
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中...';
+        
+        // 显示加载状态
+        usernameInput.disabled = true;
+        cancelBtn.disabled = true;
+        
+        // 构建请求数据
+        const requestData = {
+            username: newUsername
+        };
+        console.log('正在提交用户名修改请求:', JSON.stringify(requestData));
+        
+        // 发送请求到后端
+        fetch('/profile/api/change-username', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            credentials: 'include' // 确保包含cookie
+        })
+        .then(async response => {
+            console.log('用户名修改响应状态:', response.status);
+            
+            let text = '';
+            try {
+                text = await response.text();
+                console.log('原始响应文本:', text);
+            } catch (e) {
+                console.error('读取响应文本失败:', e);
+            }
+            
+            let json = null;
+            if (text) {
+                try {
+                    json = JSON.parse(text);
+                } catch (e) {
+                    console.error('解析响应JSON失败:', e);
+                }
+            }
+            
+            return { 
+                json,
+                text,
+                status: response.status,
+                ok: response.ok
+            };
+        })
+        .then(result => {
+            // 重置按钮状态
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存';
+            usernameInput.disabled = false;
+            cancelBtn.disabled = false;
+            
+            // 处理错误情况
+            if (!result.ok) {
+                const errorMessage = result.json && result.json.error 
+                    ? result.json.error 
+                    : `请求失败，状态码：${result.status}`;
+                    
+                throw new Error(errorMessage);
+            }
+            
+            const data = result.json || {};
+            console.log('用户名修改响应数据:', data);
+            
+            // 响应成功 
+            if (data.status === 'success' || result.ok) {
+                // 更新所有显示用户名的地方
+                usernameDisplay.textContent = newUsername;
+                document.getElementById('info-name').textContent = newUsername;
+                if (dropdownUserName) dropdownUserName.textContent = newUsername.toUpperCase();
+                document.title = newUsername;
+                
+                // 关闭编辑模式
+                hideEditMode();
+                
+                // 显示成功消息
+                showToast('用户名修改成功', 'success');
+                
+                // 2秒后刷新用户信息
+                setTimeout(() => {
+                    fetchUserInfo();
+                }, 2000);
+            } else {
+                showToast(data.error || '用户名修改失败', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('修改用户名请求失败:', error);
+            
+            // 重置按钮状态
+            saveBtn.disabled = false;
+            saveBtn.textContent = '保存';
+            usernameInput.disabled = false;
+            cancelBtn.disabled = false;
+            
+            // 显示错误消息
+            showToast(error.message || '网络错误，请稍后重试', 'error');
+        });
+    }
+    
+    // 点击用户名显示编辑框
+    editableNameContainer.addEventListener('click', showEditMode);
+    
+    // 保存按钮
+    saveBtn.addEventListener('click', saveUsername);
+    
+    // 取消按钮
+    cancelBtn.addEventListener('click', hideEditMode);
+    
+    // 输入框按下回车键保存
+    usernameInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveUsername();
+        }
+    });
+    
+    // 点击其他区域关闭编辑框
+    document.addEventListener('mousedown', function(e) {
+        if (usernameEditActive && 
+            !usernameEditContainer.contains(e.target) && 
+            !editableNameContainer.contains(e.target)) {
+            hideEditMode();
+        }
+    });
+    
+    // 按下Escape键关闭编辑框
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && usernameEditActive) {
+            hideEditMode();
+        }
     });
 } 
