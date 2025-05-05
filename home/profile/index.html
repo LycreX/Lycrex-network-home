@@ -109,6 +109,198 @@
                 margin-bottom: 20px;
             }
         }
+
+        /* 添加模态对话框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            transition: opacity 0.3s ease;
+            opacity: 0;
+        }
+        
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 1;
+        }
+        
+        .modal-content {
+            background-color: #111;
+            border-radius: 12px;
+            border: 1px solid #333;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            animation: modalFadeIn 0.3s ease;
+            overflow: hidden;
+        }
+        
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #333;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            font-size: 24px;
+            color: #aaa;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        
+        .close-btn:hover {
+            color: #fff;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .modal-footer {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            border-top: 1px solid #333;
+        }
+        
+        .btn-cancel {
+            background-color: transparent;
+            border: 1px solid #333;
+        }
+        
+        .btn-cancel:hover {
+            background-color: #222;
+        }
+        
+        /* 表单样式 */
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ddd;
+            font-size: 14px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 15px;
+            font-family: var(--font-sans);
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #666;
+            background-color: #2a2a2a;
+        }
+        
+        .error-message {
+            color: #f44336;
+            font-size: 14px;
+            margin-top: 8px;
+            min-height: 18px;
+        }
+
+        /* 退出过渡效果 */
+        body.fade-out {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.98);
+            filter: blur(3px);
+            transition: opacity 0.4s cubic-bezier(0.4, 0.0, 0.2, 1), 
+                        filter 0.4s cubic-bezier(0.4, 0.0, 0.2, 1), 
+                        transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        
+        /* 页面加载动画 */
+        @media (min-width: 768px) {
+            .right-column {
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .right-column .card-notes.pinned {
+                order: -1;
+            }
+
+            #pinnedNotesContainer {
+                display: none;
+            }
+        }
+
+        /* 退出过渡覆盖层 */
+        .logout-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        
+        .logout-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+        
+        .logout-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -141,7 +333,7 @@
                     <div class="user-email" id="dropdown-user-email">加载中...</div>
                 </div>
                 <div class="dropdown-item dropdown-disabled">个人资料</div>
-                <div class="dropdown-item dropdown-disabled">账户设置</div>
+                <div class="dropdown-item" id="change-password-btn">修改密码</div>
                 <div class="dropdown-divider"></div>
                 <a href="/profile/logout" class="dropdown-item">退出登录</a>
             </div>
@@ -154,7 +346,7 @@
         <p class="page-description">You can manage your account, token, and client settings here.</p>
 
         <!-- 用户头像和基本信息 -->
-        <div class="header" style="margin-bottom: 40px;">
+        <div class="header header-margin">
             <div class="avatar-container" id="avatar-upload-btn">
                 <img id="user-avatar" alt="Avatar" class="avatar">
                 <div class="avatar-upload">
@@ -163,8 +355,8 @@
                 </div>
             </div>
             <div>
-                <h2 id="user-name" style="font-size: 32px; margin: 0; color: white;">Loading...</h2>
-                <p id="user-email" style="color: #aaaaaa; margin: 5px 0 0 0;">Loading...</p>
+                <h2 id="user-name" class="user-name-large">Loading...</h2>
+                <p id="user-email" class="user-email-muted">Loading...</p>
             </div>
         </div>
 
@@ -237,7 +429,7 @@
                     <div class="inner-box">
                         <div class="inner-box-title">Last 30 Days Login Count</div>
                         <div class="progress-bar">
-                            <div id="login-progress" class="progress-fill" style="width: 0%;"></div>
+                            <div id="login-progress" class="progress-fill"></div>
                         </div>
                         <div class="usage-details">
                             <span id="login-count-text" class="mono-text">Loading...</span>
@@ -259,77 +451,47 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- 退出登录按钮 -->
-        <!-- <a href="/profile/logout" class="btn">Log Out</a> -->
+    <!-- 退出过渡覆盖层 -->
+    <div id="logoutOverlay" class="logout-overlay">
+        <div class="logout-spinner"></div>
     </div>
 
     <!-- 消息提示组件 -->
     <div id="toast" class="toast"></div>
 
+    <!-- 修改密码对话框 -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>修改密码</h3>
+                <span class="close-btn">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="old-password">当前密码</label>
+                    <input type="password" id="old-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="new-password">新密码</label>
+                    <input type="password" id="new-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">确认新密码</label>
+                    <input type="password" id="confirm-password" class="form-input">
+                </div>
+                <div id="password-error" class="error-message"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-password-btn" class="btn btn-cancel">取消</button>
+                <button id="save-password-btn" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 引入JavaScript文件 -->
     <script src="static/profile/js/main.js"></script>
-    
-    <script>
-        // 便利贴置顶功能
-        document.addEventListener('DOMContentLoaded', function() {
-            const pinButton = document.getElementById('pinNoteBtn');
-            const notesCard = document.getElementById('notesCard');
-            const pinnedNotesContainer = document.getElementById('pinnedNotesContainer');
-            const rightColumn = document.querySelector('.right-column');
-            
-            // 从localStorage加载置顶状态
-            const isPinned = localStorage.getItem('notesPinned') === 'true';
-            
-            function updateNotePosition(isPinned) {
-                const isMobile = window.innerWidth < 768;
-                
-                if (isPinned) {
-                    if (isMobile) {
-                        // 移动端：移动到左列
-                        pinnedNotesContainer.appendChild(notesCard);
-                    } else {
-                        // 桌面端：保持在右列
-                        rightColumn.appendChild(notesCard);
-                    }
-                    notesCard.classList.add('pinned');
-                    pinButton.classList.add('pinned');
-                } else {
-                    // 取消置顶：移回右列
-                    rightColumn.appendChild(notesCard);
-                    notesCard.classList.remove('pinned');
-                    pinButton.classList.remove('pinned');
-                }
-            }
-            
-            // 初始化置顶状态
-            updateNotePosition(isPinned);
-            
-            // 监听窗口大小变化
-            window.addEventListener('resize', () => {
-                if (notesCard.classList.contains('pinned')) {
-                    updateNotePosition(true);
-                }
-            });
-            
-            pinButton.addEventListener('click', function() {
-                const willBePinned = !notesCard.classList.contains('pinned');
-                updateNotePosition(willBePinned);
-                
-                // 保存置顶状态到localStorage
-                localStorage.setItem('notesPinned', willBePinned);
-                
-                // 显示提示消息
-                const toast = document.getElementById('toast');
-                toast.textContent = willBePinned ? '便利贴已置顶' : '便利贴已取消置顶';
-                toast.classList.add('show');
-                
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 2000);
-            });
-        });
-    </script>
     
     <!-- 版权信息区域 -->
     <footer class="footer">
@@ -344,7 +506,7 @@
                 本网站使用的所有内容、资源和技术均受中国及国际相关法律法规保护。<br>
                 未经许可，不得复制、修改、传播或用于商业用途。
             </div>
-            <div style="margin-top: 8px;">
+            <div class="footer-support-text">
                 基于 <a href="https://lycrex.com" class="footer-link" target="_blank">Lycrex Network</a>|<a href="https://oauth.lycrex.com" class="footer-link" target="_blank">Lycrex Authorization</a> 技术支持
             </div>
         </div>

@@ -538,7 +538,7 @@ pub async fn save_user_notes_api(
     // 保存备忘录到数据库
     match save_user_note(&user_id, content) {
         Ok(_) => {
-            info!("用户 {} 的备忘录已保存", user_id);
+            // info!("用户 {} 的备忘录已保存", user_id);
             
             // 返回成功状态和最后更新时间
             (StatusCode::OK, Json(json!({
@@ -599,6 +599,142 @@ pub async fn get_user_notes_api(
             error!("获取备忘录失败: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
                 "error": "获取备忘录失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 修改用户密码
+pub async fn change_password_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 使用全局配置
+    let oauth_config = get_oauth_config();
+    
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户ID
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从请求体中获取旧密码和新密码
+    let old_password = match payload.get("old_password") {
+        Some(pwd) => match pwd.as_str() {
+            Some(text) => text,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "旧密码必须是字符串"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含旧密码"
+            }))).into_response();
+        }
+    };
+
+    let new_password = match payload.get("new_password") {
+        Some(pwd) => match pwd.as_str() {
+            Some(text) => text,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "新密码必须是字符串"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含新密码"
+            }))).into_response();
+        }
+    };
+
+    // 构建发送到授权服务器的请求
+    let password_change_url = format!("{}/api/users/{}/password", oauth_config.auth_server_url, user_id);
+    
+    let password_data = json!({
+        "old_password": old_password,
+        "new_password": new_password
+    });
+
+    // 发送密码修改请求到授权服务器
+    let response = match client
+        .put(&password_change_url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .json(&password_data)
+        .send()
+        .await {
+            Ok(resp) => resp,
+            Err(e) => {
+                error!("请求密码修改失败: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": "请求密码修改失败"
+                }))).into_response();
+            }
+        };
+
+    // 处理响应
+    let status = response.status();
+    let response_body = match response.json::<serde_json::Value>().await {
+        Ok(body) => body,
+        Err(e) => {
+            error!("解析密码修改响应失败: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "解析密码修改响应失败"
+            }))).into_response();
+        }
+    };
+
+    // 根据状态码返回对应响应
+    match status.as_u16() {
+        200 => {
+            info!("用户 {} 密码修改成功", user_id);
+            (StatusCode::OK, Json(json!({
+                "status": "success",
+                "message": "密码修改成功"
+            }))).into_response()
+        },
+        400 => {
+            let error_msg = response_body.get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("旧密码验证失败");
+            
+            error!("密码修改失败: {}", error_msg);
+            (StatusCode::BAD_REQUEST, Json(json!({
+                "error": error_msg
+            }))).into_response()
+        },
+        401 => {
+            (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "认证失败"
+            }))).into_response()
+        },
+        403 => {
+            (StatusCode::FORBIDDEN, Json(json!({
+                "error": "无权修改此用户密码"
+            }))).into_response()
+        },
+        _ => {
+            error!("密码修改失败，状态码: {}", status);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "密码修改失败"
             }))).into_response()
         }
     }

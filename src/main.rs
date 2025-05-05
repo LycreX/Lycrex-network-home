@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tokio::signal;
 
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
     response::Html,
     extract::Extension,
@@ -110,6 +110,7 @@ fn create_router() -> Router {
             .route("/api/upload-avatar", post(profile::handlers::upload_avatar))
             .route("/api/notes", get(profile::handlers::get_user_notes_api))
             .route("/api/notes", post(profile::handlers::save_user_notes_api))
+            .route("/api/change-password", put(profile::handlers::change_password_api))
         )
         // 全局状态
         .layer(Extension(client_state))
