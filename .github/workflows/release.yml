@@ -136,7 +136,7 @@ jobs:
       - name: 创建发布
         uses: softprops/action-gh-release@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN }}
           name: Release ${{ steps.get_version.outputs.VERSION }}
           draft: false
           prerelease: false
