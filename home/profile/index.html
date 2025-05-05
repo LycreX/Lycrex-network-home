@@ -6,6 +6,110 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile</title>
     <link rel="stylesheet" href="static/profile/css/styles.css">
+    <style>
+        .pin-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            margin-left: 8px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            vertical-align: middle;
+            color: white;
+        }
+        
+        .pin-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .pin-button svg {
+            transition: all 0.3s ease;
+        }
+        
+        .pin-button svg path {
+            stroke: white;
+            fill: none;
+            transition: all 0.3s ease;
+        }
+        
+        .pin-button.pinned svg path {
+            fill: white;
+            stroke: white;
+        }
+        
+        .pin-button:hover svg path {
+            fill: rgba(255, 255, 255, 0.2);
+        }
+        
+        .card-notes.pinned {
+            border: 2px solid #FFD700;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+        }
+
+        .card-notes {
+            transition: all 0.3s ease;
+        }
+
+        /* 自定义滚动条样式 */
+        .notes-textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .notes-textarea::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .notes-textarea::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .notes-textarea::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Firefox滚动条样式 */
+        .notes-textarea {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+        }
+
+        /* 桌面端样式 */
+        @media (min-width: 768px) {
+            .right-column {
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .right-column .card-notes.pinned {
+                order: -1;
+            }
+
+            #pinnedNotesContainer {
+                display: none;
+            }
+        }
+
+        /* 移动端样式 */
+        @media (max-width: 767px) {
+            .cards-grid {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .left-column, .right-column {
+                width: 100%;
+            }
+
+            #pinnedNotesContainer .card-notes.pinned {
+                margin-top: 20px;
+                margin-bottom: 20px;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- 顶部导航栏 -->
@@ -66,70 +170,92 @@
 
         <!-- 内容卡片网格布局 -->
         <div class="cards-grid">
-            <!-- 基本信息卡片 -->
-            <div class="card card-basic">
-                <h2 class="card-title">Basic Information</h2>
-                <div class="info-item">
-                    <div class="info-label">Name</div>
-                    <div id="info-name" class="info-value">Loading...</div>
+            <!-- 左列 -->
+            <div class="left-column">
+                <!-- 基本信息卡片 -->
+                <div class="card card-basic">
+                    <h2 class="card-title">Basic Information</h2>
+                    <div class="info-item">
+                        <div class="info-label">Name</div>
+                        <div id="info-name" class="info-value">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Email</div>
+                        <div class="info-value">
+                            <span id="email-verified-badge" class="not-verified-badge">Loading...</span>
+                            <span id="info-email">Loading...</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="info-item">
-                    <div class="info-label">Email</div>
-                    <div class="info-value">
-                        <span id="email-verified-badge" class="not-verified-badge">Loading...</span>
-                        <span id="info-email">Loading...</span>
+
+                <!-- 便利贴放置区域（置顶时使用） -->
+                <div id="pinnedNotesContainer"></div>
+
+                <!-- 快速链接卡片 -->
+                <div class="card card-links">
+                    <h2 class="card-title">快速连接</h2>
+                    <div class="quick-links">
+                        <a href="https://git.lycrex.com" class="interactive-item" target="_blank">
+                            <div class="item-icon">🔄</div>
+                            <div class="item-text">
+                                <div class="item-title">Git 仓库</div>
+                                <div class="item-desc">Git - 代码管理与版本控制</div>
+                            </div>
+                        </a>
+                        <a href="https://note.lycrex.com" class="interactive-item" target="_blank">
+                            <div class="item-icon">📝</div>
+                            <div class="item-text">
+                                <div class="item-title">笔记</div>
+                                <div class="item-desc">Note - LycreX Cloud Note</div>
+                            </div>
+                        </a>
+                        <a href="https://lab.lycrex.com" class="interactive-item" target="_blank">
+                            <div class="item-icon">🧪</div>
+                            <div class="item-text">
+                                <div class="item-title">实验室</div>
+                                <div class="item-desc">Lab - 探索最新的技术与项目</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 最近登录客户端卡片 -->
+                <div class="card card-clients">
+                    <h2 class="card-title">最近登录的客户端</h2>
+                    <div id="recent-clients-list" class="sessions-list">
+                        <div class="loading-indicator">加载中...</div>
                     </div>
                 </div>
             </div>
 
-            <!-- 登录统计卡片 -->
-            <div class="card card-count">
-                <h2 class="card-title">Login Count</h2>
-                
-                <div class="inner-box">
-                    <div class="inner-box-title">Last 30 Days Login Count</div>
-                    <div class="progress-bar">
-                        <div id="login-progress" class="progress-fill" style="width: 0%;"></div>
-                    </div>
-                    <div class="usage-details">
-                        <span id="login-count-text" class="mono-text">Loading...</span>
+            <!-- 右列 -->
+            <div class="right-column">
+                <!-- 登录统计卡片 -->
+                <div class="card card-count">
+                    <h2 class="card-title">Login Count</h2>
+                    
+                    <div class="inner-box">
+                        <div class="inner-box-title">Last 30 Days Login Count</div>
+                        <div class="progress-bar">
+                            <div id="login-progress" class="progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <div class="usage-details">
+                            <span id="login-count-text" class="mono-text">Loading...</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- 快速链接卡片 -->
-            <div class="card card-links">
-                <h2 class="card-title">快速连接</h2>
-                <div class="quick-links">
-                    <a href="https://git.lycrex.com" class="interactive-item" target="_blank">
-                        <div class="item-icon">🔄</div>
-                        <div class="item-text">
-                            <div class="item-title">Git 仓库</div>
-                            <div class="item-desc">Git - 代码管理与版本控制</div>
-                        </div>
-                    </a>
-                    <a href="https://note.lycrex.com" class="interactive-item" target="_blank">
-                        <div class="item-icon">📝</div>
-                        <div class="item-text">
-                            <div class="item-title">笔记</div>
-                            <div class="item-desc">Note - LycreX Cloud Note</div>
-                        </div>
-                    </a>
-                    <a href="https://lab.lycrex.com" class="interactive-item" target="_blank">
-                        <div class="item-icon">🧪</div>
-                        <div class="item-text">
-                            <div class="item-title">实验室</div>
-                            <div class="item-desc">Lab - 探索最新的技术与项目</div>
-                        </div>
-                    </a>
-                </div>
-            </div>
-
-            <!-- 最近登录客户端卡片 -->
-            <div class="card card-clients">
-                <h2 class="card-title">最近登录的客户端</h2>
-                <div id="recent-clients-list" class="sessions-list">
-                    <div class="loading-indicator">加载中...</div>
+                <!-- 便利贴卡片 -->
+                <div class="card card-notes" id="notesCard">
+                    <h2 class="card-title">
+                        便利贴
+                        <button id="pinNoteBtn" class="pin-button" title="置顶便利贴">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
+                                <path d="M12 2L9 9H2L7 14L5 22L12 17L19 22L17 14L22 9H15L12 2Z" fill="none" stroke="white" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </h2>
+                    <textarea id="notes-content" class="notes-textarea" placeholder="在这里写下你的想法..."></textarea>
                 </div>
             </div>
         </div>
@@ -143,6 +269,67 @@
 
     <!-- 引入JavaScript文件 -->
     <script src="static/profile/js/main.js"></script>
+    
+    <script>
+        // 便利贴置顶功能
+        document.addEventListener('DOMContentLoaded', function() {
+            const pinButton = document.getElementById('pinNoteBtn');
+            const notesCard = document.getElementById('notesCard');
+            const pinnedNotesContainer = document.getElementById('pinnedNotesContainer');
+            const rightColumn = document.querySelector('.right-column');
+            
+            // 从localStorage加载置顶状态
+            const isPinned = localStorage.getItem('notesPinned') === 'true';
+            
+            function updateNotePosition(isPinned) {
+                const isMobile = window.innerWidth < 768;
+                
+                if (isPinned) {
+                    if (isMobile) {
+                        // 移动端：移动到左列
+                        pinnedNotesContainer.appendChild(notesCard);
+                    } else {
+                        // 桌面端：保持在右列
+                        rightColumn.appendChild(notesCard);
+                    }
+                    notesCard.classList.add('pinned');
+                    pinButton.classList.add('pinned');
+                } else {
+                    // 取消置顶：移回右列
+                    rightColumn.appendChild(notesCard);
+                    notesCard.classList.remove('pinned');
+                    pinButton.classList.remove('pinned');
+                }
+            }
+            
+            // 初始化置顶状态
+            updateNotePosition(isPinned);
+            
+            // 监听窗口大小变化
+            window.addEventListener('resize', () => {
+                if (notesCard.classList.contains('pinned')) {
+                    updateNotePosition(true);
+                }
+            });
+            
+            pinButton.addEventListener('click', function() {
+                const willBePinned = !notesCard.classList.contains('pinned');
+                updateNotePosition(willBePinned);
+                
+                // 保存置顶状态到localStorage
+                localStorage.setItem('notesPinned', willBePinned);
+                
+                // 显示提示消息
+                const toast = document.getElementById('toast');
+                toast.textContent = willBePinned ? '便利贴已置顶' : '便利贴已取消置顶';
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 2000);
+            });
+        });
+    </script>
     
     <!-- 版权信息区域 -->
     <footer class="footer">

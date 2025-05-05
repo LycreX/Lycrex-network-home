@@ -39,7 +39,7 @@ async fn main() {
     
     // 创建并运行服务器
     let app = create_router();
-    let addr = SocketAddr::from(([127, 0, 0, 1], get_server_config().port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], get_server_config().port));
     info!("服务器运行在: http://{}", addr);
     
     // 运行服务器直到接收到关闭信号
@@ -108,6 +108,8 @@ fn create_router() -> Router {
             .route("/api/userinfo", get(profile::handlers::get_user_info_api))
             .route("/api/user/login-stats", get(profile::handlers::get_login_stats_api))
             .route("/api/upload-avatar", post(profile::handlers::upload_avatar))
+            .route("/api/notes", get(profile::handlers::get_user_notes_api))
+            .route("/api/notes", post(profile::handlers::save_user_notes_api))
         )
         // 全局状态
         .layer(Extension(client_state))

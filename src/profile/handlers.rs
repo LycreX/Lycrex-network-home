@@ -2,7 +2,7 @@ use crate::config::get_oauth_config;
 use super::models::ProcessedCodes;
 use crate::profile::utils;
 use axum::{
-    extract::{Query, Multipart},
+    extract::{Query, Multipart, State},
     response::{Redirect, Json, IntoResponse},
     http::StatusCode,
     Extension,
@@ -12,6 +12,7 @@ use rimplog::{error, info};
 use serde_json::{self, json};
 use std::sync::{Arc, Mutex};
 use tower_cookies::{Cookie, Cookies};
+use crate::db::{self, get_user_note, save_user_note};
 
 type ClientState = Arc<reqwest::Client>;
 type ProcessedCodesState = Arc<Mutex<ProcessedCodes>>;
@@ -483,4 +484,122 @@ pub async fn logout(cookies: Cookies) -> impl IntoResponse {
     cookies.remove(user_info);
     
     Redirect::to("/auth")
+}
+
+// 保存用户备忘录
+pub async fn save_user_notes_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从请求体中获取备忘录内容
+    let content = match payload.get("content") {
+        Some(content) => match content.as_str() {
+            Some(text) => text,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "备忘录内容必须是字符串"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含备忘录内容"
+            }))).into_response();
+        }
+    };
+
+    // 获取当前时间戳，将用于返回给客户端
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // 保存备忘录到数据库
+    match save_user_note(&user_id, content) {
+        Ok(_) => {
+            info!("用户 {} 的备忘录已保存", user_id);
+            
+            // 返回成功状态和最后更新时间
+            (StatusCode::OK, Json(json!({
+                "status": "success",
+                "message": "备忘录已保存",
+                "last_updated": now
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("保存备忘录失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "保存备忘录失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 获取用户备忘录
+pub async fn get_user_notes_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从数据库获取备忘录
+    match get_user_note(&user_id) {
+        Ok(Some(note)) => {
+            (StatusCode::OK, Json(json!({
+                "content": note.content,
+                "last_updated": note.last_updated
+            }))).into_response()
+        },
+        Ok(None) => {
+            // 如果用户没有备忘录
+            (StatusCode::NOT_FOUND, Json(json!({
+                "error": "未找到备忘录"
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("获取备忘录失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "获取备忘录失败"
+            }))).into_response()
+        }
+    }
 } 

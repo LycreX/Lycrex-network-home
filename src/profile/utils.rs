@@ -159,4 +159,58 @@ pub async fn get_user_info(
     }
 
     Err(format!("获取用户信息失败，已重试 {} 次。最后错误: {}", max_retries, last_error))
+}
+
+/// 从访问令牌中获取用户ID
+pub async fn get_user_id_from_token(
+    client: &reqwest::Client, 
+    token: &str
+) -> Result<String, String> {
+    let oauth_config = crate::config::get_oauth_config();
+    let user_info_url = format!("{}/api/oauth/userinfo", oauth_config.auth_server_url);
+    
+    // 使用访问令牌获取用户信息
+    match client
+        .get(&user_info_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status();
+            
+            if !status.is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                let error_msg = format!("获取用户信息失败，状态码: {}, 错误: {}", status, error_text);
+                error!("{}", error_msg);
+                return Err(error_msg);
+            }
+            
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    // 从JSON中提取用户ID
+                    if let Some(id) = json.get("id").and_then(|v| v.as_str()) {
+                        return Ok(id.to_string());
+                    } else if let Some(id) = json.get("sub").and_then(|v| v.as_str()) {
+                        return Ok(id.to_string());
+                    } else {
+                        let error_msg = "用户信息中没有id或sub字段".to_string();
+                        error!("{}", error_msg);
+                        return Err(error_msg);
+                    }
+                },
+                Err(e) => {
+                    let error_msg = format!("解析用户信息失败: {}", e);
+                    error!("{}", error_msg);
+                    return Err(error_msg);
+                }
+            }
+        },
+        Err(e) => {
+            let error_msg = format!("请求用户信息失败: {}", e);
+            error!("{}", error_msg);
+            return Err(error_msg);
+        }
+    }
 } 

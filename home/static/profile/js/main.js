@@ -12,6 +12,14 @@ let dropdownUserEmail;
 // 卡片加载状态标记
 let cardsLoaded = false;
 
+// 用户ID缓存
+let currentUserId = '';
+
+// 备忘录同步相关变量
+let lastServerUpdate = 0; // 服务器最后更新时间戳
+let userIsEditing = false; // 用户是否正在编辑
+let syncInterval; // 同步定时器引用
+
 /**
  * 页面初始化
  * --------------------------------------
@@ -23,6 +31,112 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化各个模块
     initData();
     initUI();
+
+    // 便利贴功能
+    const notesTextarea = document.getElementById('notes-content');
+    if (!notesTextarea) {
+        console.error('便利贴文本框未找到');
+        return;
+    }
+
+    let saveTimeout;
+
+    // 从localStorage加载保存的内容
+    const loadNotes = () => {
+        // 首先尝试从服务器获取备忘录
+        fetch('/profile/api/notes')
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else if (response.status === 404) {
+                    // 如果服务器没有找到备忘录，则使用本地存储的内容
+                    return { content: localStorage.getItem('userNotes') || '' };
+                } else {
+                    throw new Error('获取备忘录失败');
+                }
+            })
+            .then(data => {
+                notesTextarea.value = data.content;
+                // 同步到localStorage
+                localStorage.setItem('userNotes', data.content);
+                console.log('从服务器加载备忘录成功');
+                
+                // 记录最后更新时间
+                if (data.last_updated) {
+                    lastServerUpdate = data.last_updated;
+                }
+                
+                // 启动自动同步
+                startAutoSync(notesTextarea);
+            })
+            .catch(error => {
+                console.error('加载备忘录失败:', error);
+                // 如果服务器请求失败，回退到本地存储
+                const savedNotes = localStorage.getItem('userNotes');
+                if (savedNotes) {
+                    notesTextarea.value = savedNotes;
+                }
+                
+                // 即使加载失败也启动自动同步
+                startAutoSync(notesTextarea);
+            });
+    };
+
+    // 自动保存功能
+    const autoSave = () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            const notes = notesTextarea.value;
+            
+            // 保存到本地存储
+            localStorage.setItem('userNotes', notes);
+            
+            // 保存到服务器
+            saveNotesToServer(notes);
+            
+            console.log('笔记已自动保存:', notes.substring(0, 20) + (notes.length > 20 ? '...' : ''));
+            // 显示保存提示（可选）
+            showToast('已自动保存');
+        }, 500);
+    };
+
+    // 添加事件监听器
+    notesTextarea.addEventListener('input', autoSave);
+    
+    // 跟踪用户是否在编辑文本区域
+    notesTextarea.addEventListener('focus', () => {
+        userIsEditing = true;
+        console.log('用户开始编辑');
+    });
+    
+    // 添加失焦保存
+    notesTextarea.addEventListener('blur', () => {
+        const notes = notesTextarea.value;
+        localStorage.setItem('userNotes', notes);
+        saveNotesToServer(notes);
+        console.log('失焦保存完成');
+        
+        // 设置延迟，以免用户只是临时失焦
+        setTimeout(() => {
+            userIsEditing = false;
+            console.log('用户停止编辑');
+        }, 500);
+    });
+
+    // 页面加载时加载保存的内容
+    loadNotes();
+    
+    // 页面关闭前保存
+    window.addEventListener('beforeunload', () => {
+        const notes = notesTextarea.value;
+        localStorage.setItem('userNotes', notes);
+        // 这里不需要调用saveNotesToServer，因为beforeunload事件中的异步操作不保证会完成
+        
+        // 清除同步定时器
+        if (syncInterval) {
+            clearInterval(syncInterval);
+        }
+    });
 });
 
 /**
@@ -384,6 +498,9 @@ function handleResponseError(status) {
 function updateUserInterface(user) {
     // 更新头像
     updateUserAvatar(user);
+    
+    // 获取用户ID并存储
+    currentUserId = user.id || user.sub || '';
     
     // 获取用户名
     const username = user.preferred_username || user.name || user.username || '';
@@ -749,4 +866,98 @@ function refreshAvatarCache() {
         avatarUrl.searchParams.set('t', timestamp);
         userAvatar.src = avatarUrl.toString();
     }
+}
+
+/**
+ * 启动自动同步功能
+ * @param {HTMLTextAreaElement} textarea - 备忘录文本区域
+ */
+function startAutoSync(textarea) {
+    // 清除可能存在的旧定时器
+    if (syncInterval) {
+        clearInterval(syncInterval);
+    }
+    
+    // 创建新的同步定时器，每10秒触发一次
+    syncInterval = setInterval(() => {
+        syncNotesFromServer(textarea);
+    }, 10000); // 10秒
+    
+    console.log('已启动备忘录自动同步 (10秒)');
+}
+
+/**
+ * 从服务器同步备忘录内容
+ * @param {HTMLTextAreaElement} textarea - 备忘录文本区域
+ */
+function syncNotesFromServer(textarea) {
+    // 如果用户正在编辑，跳过同步以避免干扰用户
+    if (userIsEditing) {
+        console.log('用户正在编辑，跳过此次同步');
+        return;
+    }
+    
+    console.log('正在与服务器同步备忘录...');
+    
+    fetch('/profile/api/notes')
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            } else if (response.status === 404) {
+                // 如果服务器没有找到备忘录，不做任何操作
+                return null;
+            } else {
+                throw new Error('同步备忘录失败，状态码: ' + response.status);
+            }
+        })
+        .then(data => {
+            if (!data) return;
+            
+            // 检查服务器的最后更新时间是否比上次同步更新
+            if (data.last_updated && data.last_updated > lastServerUpdate) {
+                console.log('发现新的服务器备忘录内容，正在更新...');
+                lastServerUpdate = data.last_updated;
+                
+                // 检查本地内容是否与服务器不同
+                if (textarea.value !== data.content) {
+                    // 更新文本区域和本地存储
+                    textarea.value = data.content;
+                    localStorage.setItem('userNotes', data.content);
+                    showToast('备忘录已自动同步', 'info');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('同步备忘录失败:', error);
+        });
+}
+
+/**
+ * 将备忘录保存到服务器
+ * @param {string} content - 备忘录内容
+ */
+function saveNotesToServer(content) {
+    fetch('/profile/api/notes', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('保存备忘录到服务器失败');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('备忘录已保存到服务器');
+        // 更新最后服务器更新时间
+        if (data && data.last_updated) {
+            lastServerUpdate = data.last_updated;
+        }
+    })
+    .catch(error => {
+        console.error('保存备忘录到服务器失败:', error);
+    });
 } 

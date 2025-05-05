@@ -21,6 +21,14 @@ pub struct IpVisitRecord {
 // 数据库连接单例
 static DB_CONN: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
 
+// 用户备忘录结构体
+#[derive(Debug, Clone)]
+pub struct UserNote {
+    pub user_id: String,
+    pub content: String,
+    pub last_updated: u64,
+}
+
 // 初始化数据库
 pub fn init_db(db_path: &str) -> SqliteResult<()> {
     // 确保数据库目录存在
@@ -62,6 +70,16 @@ pub fn init_db(db_path: &str) -> SqliteResult<()> {
             state_prov TEXT,
             city TEXT,
             last_visit INTEGER
+        )",
+        [],
+    )?;
+    
+    // 创建用户备忘录表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_notes (
+            user_id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            last_updated INTEGER NOT NULL
         )",
         [],
     )?;
@@ -340,4 +358,48 @@ pub fn get_all_ip_visit_details() -> SqliteResult<Vec<IpVisitRecord>> {
     }
     
     Ok(result)
+}
+
+// 保存用户备忘录内容
+pub fn save_user_note(user_id: &str, content: &str) -> SqliteResult<()> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    // 获取当前时间戳
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    // 使用 REPLACE 语法，如果用户已有备忘录则更新，否则插入新记录
+    conn.execute(
+        "REPLACE INTO user_notes (user_id, content, last_updated) VALUES (?, ?, ?)",
+        [user_id, content, &now.to_string()],
+    )?;
+    
+    Ok(())
+}
+
+// 获取用户备忘录内容
+pub fn get_user_note(user_id: &str) -> SqliteResult<Option<UserNote>> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    let result = conn.query_row(
+        "SELECT user_id, content, last_updated FROM user_notes WHERE user_id = ?",
+        [user_id],
+        |row| {
+            Ok(UserNote {
+                user_id: row.get(0)?,
+                content: row.get(1)?,
+                last_updated: row.get(2)?,
+            })
+        }
+    );
+    
+    match result {
+        Ok(note) => Ok(Some(note)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
 } 
