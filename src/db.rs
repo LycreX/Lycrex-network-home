@@ -30,6 +30,22 @@ pub struct UserNote {
     pub last_updated: u64,
 }
 
+// 公共便利贴结构体
+#[derive(Debug, Clone)]
+pub struct PublicNote {
+    pub channel_id: u32,
+    pub content: String,
+    pub last_updated: u64,
+}
+
+// 用户频道设置结构体
+#[derive(Debug, Clone)]
+pub struct UserChannelSetting {
+    pub user_id: String,
+    pub channel_id: u32,
+    pub last_updated: u64,
+}
+
 // 初始化数据库
 pub fn init_db(db_path: &str) -> SqliteResult<()> {
     // 确保数据库目录存在
@@ -80,6 +96,26 @@ pub fn init_db(db_path: &str) -> SqliteResult<()> {
         "CREATE TABLE IF NOT EXISTS user_notes (
             user_id TEXT PRIMARY KEY,
             content TEXT NOT NULL,
+            last_updated INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    
+    // 创建公共便利贴表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS public_notes (
+            channel_id INTEGER PRIMARY KEY,
+            content TEXT NOT NULL,
+            last_updated INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    
+    // 创建用户频道设置表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_channel_settings (
+            user_id TEXT PRIMARY KEY,
+            channel_id INTEGER NOT NULL DEFAULT 0,
             last_updated INTEGER NOT NULL
         )",
         [],
@@ -400,6 +436,94 @@ pub fn get_user_note(user_id: &str) -> SqliteResult<Option<UserNote>> {
     
     match result {
         Ok(note) => Ok(Some(note)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+// 保存公共便利贴内容
+pub fn save_public_note(channel_id: u32, content: &str) -> SqliteResult<()> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    // 获取当前时间戳
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    // 使用 REPLACE 语法，如果已有记录则更新，否则插入新记录
+    conn.execute(
+        "REPLACE INTO public_notes (channel_id, content, last_updated) VALUES (?, ?, ?)",
+        [&channel_id.to_string(), content, &now.to_string()],
+    )?;
+    
+    Ok(())
+}
+
+// 获取公共便利贴内容
+pub fn get_public_note(channel_id: u32) -> SqliteResult<Option<PublicNote>> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    let result = conn.query_row(
+        "SELECT channel_id, content, last_updated FROM public_notes WHERE channel_id = ?",
+        [channel_id],
+        |row| {
+            Ok(PublicNote {
+                channel_id: row.get::<_, i64>(0)? as u32,
+                content: row.get(1)?,
+                last_updated: row.get(2)?,
+            })
+        }
+    );
+    
+    match result {
+        Ok(note) => Ok(Some(note)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+// 保存用户频道设置
+pub fn save_user_channel_setting(user_id: &str, channel_id: u32) -> SqliteResult<()> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    // 获取当前时间戳
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    // 使用 REPLACE 语法，如果已有记录则更新，否则插入新记录
+    conn.execute(
+        "REPLACE INTO user_channel_settings (user_id, channel_id, last_updated) VALUES (?, ?, ?)",
+        [user_id, &channel_id.to_string(), &now.to_string()],
+    )?;
+    
+    Ok(())
+}
+
+// 获取用户频道设置
+pub fn get_user_channel_setting(user_id: &str) -> SqliteResult<Option<UserChannelSetting>> {
+    let conn = get_db_conn();
+    let conn = conn.lock().expect("无法获取数据库锁");
+    
+    let result = conn.query_row(
+        "SELECT user_id, channel_id, last_updated FROM user_channel_settings WHERE user_id = ?",
+        [user_id],
+        |row| {
+            Ok(UserChannelSetting {
+                user_id: row.get(0)?,
+                channel_id: row.get::<_, i64>(1)? as u32,
+                last_updated: row.get(2)?,
+            })
+        }
+    );
+    
+    match result {
+        Ok(setting) => Ok(Some(setting)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),
     }

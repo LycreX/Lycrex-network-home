@@ -830,13 +830,6 @@ h1.page-title {
  * 响应式设计
  * --------------------------------------
  */
-@media (min-width: 768px) {
-    .session-item {
-        border-radius: 16px;
-        padding: 16px 18px;
-    }
-}
-
 @media (max-width: 1024px) {
     .navbar {
         margin: 15px 40px;
@@ -1093,35 +1086,6 @@ h1.page-title {
 }
 
 /**
- * 笔记文本区域滚动条样式
- * --------------------------------------
- */
-.notes-textarea::-webkit-scrollbar {
-    width: 8px;
-}
-
-.notes-textarea::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-}
-
-.notes-textarea::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    transition: all 0.3s ease;
-}
-
-.notes-textarea::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-/* Firefox滚动条样式 */
-.notes-textarea {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
-}
-
-/**
  * 桌面端和移动端便利贴布局
  * --------------------------------------
  */
@@ -1138,9 +1102,13 @@ h1.page-title {
     #pinnedNotesContainer {
         display: none;
     }
+    
+    .session-item {
+        border-radius: 16px;
+        padding: 16px 18px;
+    }
 }
 
-/* 移动端样式 */
 @media (max-width: 767px) {
     .cards-grid {
         display: flex;
@@ -1157,10 +1125,7 @@ h1.page-title {
     }
 }
 
-/**
- * 模态对话框样式
- * --------------------------------------
- */
+/* 添加模态对话框样式 */
 .modal {
     display: none;
     position: fixed;
@@ -1372,3 +1337,418 @@ body.fade-out {
 .progress-fill {
     width: 0%;
 } 
+
+.card-notes.pinned {
+    border: 2px solid #FFD700;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+}
+
+.card-notes {
+    transition: all 0.3s ease, box-shadow 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.card-notes:focus-within {
+    box-shadow: none;
+}
+
+/* 用户名编辑相关样式 */
+.editable-name {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.editable-name:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin: -2px -8px;
+}
+
+.editable-name .edit-icon {
+    opacity: 0;
+    margin-left: 6px;
+    transition: opacity 0.2s ease;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.editable-name:hover .edit-icon {
+    opacity: 1;
+}
+
+.username-edit-container {
+    display: none;
+    margin: 8px 0;
+}
+
+.username-input {
+    background-color: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    width: 100%;
+    margin-bottom: 8px;
+    outline: none;
+    font-family: var(--font-sans);
+    transition: all 0.2s ease;
+}
+
+.username-input:focus {
+    border-color: #777;
+    background-color: #3a3a3a;
+}
+
+.username-edit-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.username-btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: none;
+    outline: none;
+}
+
+.username-save-btn {
+    background-color: #4285f4;
+    color: white;
+}
+
+.username-save-btn:hover {
+    background-color: #3275e4;
+}
+
+.username-save-btn:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+
+.username-cancel-btn {
+    background-color: transparent;
+    color: #ccc;
+    border: 1px solid #555;
+}
+
+.username-cancel-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 便利贴控制样式 */
+.card-notes .card-title {
+    display: flex;
+    padding-bottom: 12px;
+}
+
+.notes-title-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    height: 24px;
+    transition: transform 0.3s ease;
+}
+
+.notes-title-left, .notes-title-right {
+    display: flex;
+    align-items: center;
+    height: 24px;
+}
+
+.title-text {
+    margin-right: 8px;
+    font-size: 14px;
+    height: 24px;
+    line-height: 24px;
+    display: flex;
+    align-items: center;
+}
+
+.note-type-switch {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.switch-label {
+    font-size: 12px;
+    color: white;
+    margin: 0 4px;
+    height: 24px;
+    line-height: 24px;
+    transition: color 0.3s ease;
+}
+
+.switch-label.active {
+    color: white;
+    font-weight: 500;
+}
+
+.switch-label.inactive {
+    color: white;
+    font-weight: 500;
+}
+
+.note-type-switch:hover .switch-label {
+    color: white;
+}
+
+/* 滑条按钮样式 */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 18px;
+    margin: 0;
+    vertical-align: middle;
+    transform: translateY(1px);
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    transition: .4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+input:checked + .slider {
+    background-color: rgba(32, 178, 170, 0.6);
+}
+
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+.slider.round {
+    border-radius: 20px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* 频道输入框增强 */
+.channel-input-container {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    margin-right: 10px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    position: relative;
+    overflow: visible;
+}
+
+.channel-input-container:after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: -1px;
+    left: 50%;
+    background: #4a90e2;
+    transition: width 0.3s ease, left 0.3s ease;
+    z-index: 1;
+    transform: translateY(3px);
+}
+
+.channel-input-container:focus-within:after {
+    display: none;
+}
+
+.channel-input {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    padding: 0;
+    width: 40px;
+    font-size: 12px;
+    text-align: center;
+    height: 18px;
+    box-sizing: border-box;
+    margin-top: 3px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.channel-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    width: 48px;
+}
+
+/* 添加通道号提示文字 */
+.channel-number-label {
+    display: none;
+}
+
+.channel-input-container:focus-within .channel-number-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* 去除Chrome、Safari、Edge、Opera中的上下箭头 */
+.channel-input::-webkit-outer-spin-button,
+.channel-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* 去除Firefox中的上下箭头 */
+.channel-input {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.channel-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.pin-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 2px;
+    border-radius: 4px;
+    transition: all 0.3s ease, transform 0.2s ease;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    width: 24px;
+}
+
+.pin-button:hover {
+    background-color: transparent;
+    transform: scale(1.1);
+}
+
+.pin-button:active {
+    transform: scale(0.95);
+}
+
+.pin-button svg {
+    transition: all 0.3s ease;
+}
+
+.pin-button svg path {
+    stroke: white;
+    fill: none;
+    transition: all 0.3s ease;
+}
+
+.pin-button.pinned svg path {
+    fill: white;
+    stroke: white;
+}
+
+.pin-button:hover svg path {
+    fill: rgba(255, 255, 255, 0.2);
+}
+
+/* 确保所有元素垂直对齐 */
+.card-notes .card-title * {
+    vertical-align: middle;
+}
+
+/* 便利贴标题悬停效果 */
+.card-notes .card-title:hover .title-text {
+    color: inherit;
+    transition: none;
+}
+
+/* 便利贴输入框美化 */
+.notes-textarea {
+    width: 100%;
+    flex: 1;
+    padding: 16px;
+    border: none;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 16px;
+    line-height: 1.5;
+    resize: none;
+    margin-top: 10px;
+    box-sizing: border-box;
+    transition: background-color 0.3s ease;
+}
+
+.notes-textarea:focus {
+    outline: none;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 添加小标签提示输入框聚焦状态 */
+.toggle-switch:hover .slider {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* 波纹效果 */
+@keyframes ripple {
+    0% {
+        transform: scale(1);
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+.toggle-switch input:checked + .slider:after {
+    display: none;
+}
+
+.channel-input-container[style*="hidden"] {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-10px);
+}
+
+.channel-input-container:after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: -1px;
+    left: 50%;
+    background: #4a90e2;
+    transition: width 0.3s ease, left 0.3s ease;
+    z-index: 1;
+    transform: translateY(3px);
+}

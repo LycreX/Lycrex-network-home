@@ -11,17 +11,23 @@ let userIsEditing = false;
 let syncInterval;
 let passwordModalActive = false;
 let usernameEditActive = false;
+let isPublicNote = false;
+let currentChannelId = 0;
 
 /**
  * 页面初始化
  */
 document.addEventListener('DOMContentLoaded', function() {
+    // 添加加载状态的CSS样式
+    addLoadingStateCss();
+    
     handleSessionCheck();
     initData();
     initUI();
     initPasswordChange();
     initLogout();
     initNotePinning();
+    initNoteTypeSwitch();
 
     const notesTextarea = document.getElementById('notes-content');
     if (!notesTextarea) {
@@ -33,35 +39,75 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 从服务器加载备忘录
     const loadNotes = () => {
-        fetch('/profile/api/notes')
+        const noteTypeToggle = document.getElementById('noteTypeToggle');
+        const channelInput = document.getElementById('channelInput');
+        
+        // 禁用输入框和开关
+        if (noteTypeToggle) noteTypeToggle.disabled = true;
+        if (channelInput) channelInput.disabled = true;
+        
+        let apiUrl = isPublicNote
+            ? `/profile/api/public-notes?channel=${currentChannelId}`
+            : '/profile/api/notes';
+            
+        console.log(`开始加载${isPublicNote ? '公共' : '个人'}备忘录，频道ID：${currentChannelId}`);
+        
+        // 先尝试从服务器加载，如果失败则使用本地存储
+        fetch(apiUrl)
             .then(response => {
                 if (response.ok) {
                     return response.json();
-                } else if (response.status === 404) {
-                    return { content: localStorage.getItem('userNotes') || '' };
                 } else {
-                    throw new Error('获取备忘录失败');
+                    // 返回本地存储的内容
+                    return { 
+                        content: (isPublicNote ? localStorage.getItem(`publicNotes_${currentChannelId}`) : localStorage.getItem('userNotes')) || '',
+                        last_updated: 0
+                    };
                 }
             })
             .then(data => {
-                notesTextarea.value = data.content;
-                localStorage.setItem('userNotes', data.content);
-                console.log('从服务器加载备忘录成功');
-                
-                if (data.last_updated) {
-                    lastServerUpdate = data.last_updated;
+                if (notesTextarea) {
+                    notesTextarea.value = data.content || '';
                 }
                 
+                if (isPublicNote) {
+                    localStorage.setItem(`publicNotes_${currentChannelId}`, data.content || '');
+                } else {
+                    localStorage.setItem('userNotes', data.content || '');
+                }
+                
+                // 更新最后同步时间
+                lastServerUpdate = data.last_updated || 0;
+                
+                console.log(`从服务器加载${isPublicNote ? '公共' : '个人'}备忘录成功，频道ID：${currentChannelId}`);
+                
+                // 启动自动同步
                 startAutoSync(notesTextarea);
+                
+                // 恢复输入框和开关
+                if (noteTypeToggle) noteTypeToggle.disabled = false;
+                if (channelInput) channelInput.disabled = false;
             })
             .catch(error => {
                 console.error('加载备忘录失败:', error);
-                const savedNotes = localStorage.getItem('userNotes');
-                if (savedNotes) {
+                
+                let savedNotes = '';
+                
+                if (isPublicNote) {
+                    savedNotes = localStorage.getItem(`publicNotes_${currentChannelId}`);
+                } else {
+                    savedNotes = localStorage.getItem('userNotes');
+                }
+                
+                if (notesTextarea && savedNotes) {
                     notesTextarea.value = savedNotes;
                 }
                 
-                startAutoSync(notesTextarea);
+                // 恢复输入框和开关
+                if (noteTypeToggle) noteTypeToggle.disabled = false;
+                if (channelInput) channelInput.disabled = false;
+                
+                showToast('加载备忘录失败，已使用本地缓存', 'error');
             });
     };
 
@@ -70,7 +116,13 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(() => {
             const notes = notesTextarea.value;
-            localStorage.setItem('userNotes', notes);
+            
+            if (isPublicNote) {
+                localStorage.setItem(`publicNotes_${currentChannelId}`, notes);
+            } else {
+                localStorage.setItem('userNotes', notes);
+            }
+            
             saveNotesToServer(notes);
             console.log('笔记已自动保存:', notes.substring(0, 20) + (notes.length > 20 ? '...' : ''));
             showToast('已自动保存');
@@ -87,7 +139,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     notesTextarea.addEventListener('blur', () => {
         const notes = notesTextarea.value;
-        localStorage.setItem('userNotes', notes);
+        
+        if (isPublicNote) {
+            localStorage.setItem(`publicNotes_${currentChannelId}`, notes);
+        } else {
+            localStorage.setItem('userNotes', notes);
+        }
+        
         saveNotesToServer(notes);
         console.log('失焦保存完成');
         
@@ -101,13 +159,129 @@ document.addEventListener('DOMContentLoaded', function() {
     
     window.addEventListener('beforeunload', () => {
         const notes = notesTextarea.value;
-        localStorage.setItem('userNotes', notes);
+        
+        if (isPublicNote) {
+            localStorage.setItem(`publicNotes_${currentChannelId}`, notes);
+        } else {
+            localStorage.setItem('userNotes', notes);
+        }
         
         if (syncInterval) {
             clearInterval(syncInterval);
         }
     });
+    
+    // 监听保存快捷键 (Ctrl+S 或 Cmd+S)
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            
+            const notes = notesTextarea.value;
+            
+            if (isPublicNote) {
+                localStorage.setItem(`publicNotes_${currentChannelId}`, notes);
+            } else {
+                localStorage.setItem('userNotes', notes);
+            }
+            
+            saveNotesToServer(notes);
+            showToast('便利贴已保存');
+        }
+    });
+    
+    // 当频道输入框发生变化时
+    const channelInput = document.getElementById('channelInput');
+    if (channelInput) {
+        channelInput.addEventListener('change', function() {
+            // 先保存当前内容
+            if (notesTextarea && isPublicNote) {
+                const currentContent = notesTextarea.value;
+                localStorage.setItem(`publicNotes_${currentChannelId}`, currentContent);
+                saveNotesToServer(currentContent);
+            }
+            
+            const newChannelId = parseInt(this.value) || 0;
+            if (newChannelId < 0) this.value = 0;
+            if (newChannelId > 9999) this.value = 9999;
+            
+            if (newChannelId !== currentChannelId) {
+                currentChannelId = newChannelId;
+                saveUserChannelSetting(currentChannelId);
+                
+                // 只有在公共便利贴模式下才重新加载笔记
+                if (isPublicNote) {
+                    loadNotes();
+                }
+                
+                showToast(`已切换到频道: ${currentChannelId}`);
+            }
+        });
+    }
 });
+
+/**
+ * 动态添加加载状态的CSS样式
+ */
+function addLoadingStateCss() {
+    const style = document.createElement('style');
+    style.textContent = `
+        /* 开关加载状态样式 */
+        .note-type-switch .switch-label.loading {
+            opacity: 0.6;
+            color: #888;
+        }
+        
+        /* 开关滑块加载状态 */
+        .note-type-switch .slider.loading {
+            transition: all 0.3s ease;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            opacity: 0.7;
+        }
+        
+        /* 开关禁用状态 */
+        .note-type-switch input:disabled + .slider {
+            opacity: 0.6;
+            cursor: wait;
+        }
+        
+        /* 脉冲动画效果 */
+        .note-type-switch .slider.loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 20px;
+            animation: pulse 1.5s ease-in-out infinite;
+            background-color: inherit;
+            z-index: -1;
+        }
+        
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.1);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        /* 输入框禁用状态 */
+        #channelInput:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 /**
  * 初始化数据
@@ -625,48 +799,87 @@ function refreshAvatarCache() {
     }
 }
 
+/**
+ * 自动同步便利贴内容到服务器
+ */
 function startAutoSync(textarea) {
+    // 先清除可能存在的定时器
     if (syncInterval) {
         clearInterval(syncInterval);
     }
     
-    syncInterval = setInterval(() => {
-        syncNotesFromServer(textarea);
-    }, 10000);
+    // 初始同步
+    syncNotesFromServer(textarea);
     
-    console.log('已启动备忘录自动同步 (10秒)');
+    // 每60秒同步一次
+    syncInterval = setInterval(() => {
+        // 只有在用户不编辑时才同步
+        if (!userIsEditing) {
+            syncNotesFromServer(textarea);
+        }
+    }, 60000);
 }
 
+/**
+ * 从服务器同步便利贴内容
+ */
 function syncNotesFromServer(textarea) {
+    if (!textarea) return;
+    
+    // 如果用户正在编辑，不进行同步
     if (userIsEditing) {
-        console.log('用户正在编辑，跳过此次同步');
+        console.log('用户正在编辑，跳过同步');
         return;
     }
     
-    console.log('正在与服务器同步备忘录...');
+    console.log(`正在与服务器同步${isPublicNote ? '公共' : '个人'}备忘录...频道:${currentChannelId}`);
     
-    fetch('/profile/api/notes')
+    // 确定API URL
+    let apiUrl = isPublicNote
+        ? `/profile/api/public-notes?channel=${currentChannelId}`
+        : '/profile/api/notes';
+    
+    fetch(apiUrl)
         .then(response => {
             if (response.ok) {
                 return response.json();
             } else if (response.status === 404) {
-                return null;
+                return { content: '', last_updated: 0 };
             } else {
-                throw new Error('同步备忘录失败，状态码: ' + response.status);
+                throw new Error('同步备忘录失败');
             }
         })
         .then(data => {
-            if (!data) return;
+            // 没有服务器数据则跳过
+            if (!data) {
+                return;
+            }
             
-            if (data.last_updated && data.last_updated > lastServerUpdate) {
-                console.log('发现新的服务器备忘录内容，正在更新...');
-                lastServerUpdate = data.last_updated;
+            // 如果服务器更新时间更新，且用户没有编辑，则使用服务器内容
+            if (data.last_updated > lastServerUpdate && !userIsEditing) {
+                // 检查本地内容是否与服务器内容不同
+                const localContent = textarea.value;
+                const serverContent = data.content || '';
                 
-                if (textarea.value !== data.content) {
-                    textarea.value = data.content;
-                    localStorage.setItem('userNotes', data.content);
-                    showToast('备忘录已自动同步', 'info');
+                if (localContent !== serverContent) {
+                    // 如果内容不同且不是用户正在编辑，则更新
+                    textarea.value = serverContent;
+                    
+                    if (isPublicNote) {
+                        localStorage.setItem(`publicNotes_${currentChannelId}`, serverContent);
+                    } else {
+                        localStorage.setItem('userNotes', serverContent);
+                    }
+                    
+                    console.log('已从服务器更新便利贴内容');
                 }
+                
+                // 更新最后同步时间
+                lastServerUpdate = data.last_updated;
+            }
+            // 如果本地有内容但服务器内容为空，且不是用户正在编辑，则可能需要将本地内容同步到服务器
+            else if (textarea.value && !data.content && !userIsEditing) {
+                saveNotesToServer(textarea.value);
             }
         })
         .catch(error => {
@@ -674,28 +887,51 @@ function syncNotesFromServer(textarea) {
         });
 }
 
+/**
+ * 保存便利贴内容到服务器
+ */
 function saveNotesToServer(content) {
-    fetch('/profile/api/notes', {
+    if (content === undefined || content === null) return;
+    
+    let apiUrl = '';
+    let requestBody = {};
+    
+    if (isPublicNote) {
+        apiUrl = '/profile/api/public-notes';
+        requestBody = {
+            channel_id: currentChannelId,
+            content: content
+        };
+    } else {
+        apiUrl = '/profile/api/notes';
+        requestBody = {
+            content: content
+        };
+    }
+    
+    fetch(apiUrl, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(requestBody)
     })
     .then(response => {
         if (!response.ok) {
-            throw new Error('保存备忘录到服务器失败');
+            throw new Error(`保存${isPublicNote ? '公共' : '个人'}备忘录到服务器失败`);
         }
         return response.json();
     })
     .then(data => {
-        console.log('备忘录已保存到服务器');
+        console.log(`${isPublicNote ? '公共' : '个人'}备忘录已保存到服务器`);
+        
+        // 更新最后同步时间
         if (data && data.last_updated) {
             lastServerUpdate = data.last_updated;
         }
     })
     .catch(error => {
-        console.error('保存备忘录到服务器失败:', error);
+        console.error(`保存${isPublicNote ? '公共' : '个人'}备忘录到服务器失败:`, error);
     });
 }
 
@@ -1138,4 +1374,383 @@ function initUsernameEdit() {
             hideEditMode();
         }
     });
+}
+
+/**
+ * 初始化便利贴类型切换功能
+ */
+function initNoteTypeSwitch() {
+    const noteTypeToggle = document.getElementById('noteTypeToggle');
+    const channelInputContainer = document.getElementById('channelInputContainer');
+    const channelInput = document.getElementById('channelInput');
+    const notesTextarea = document.getElementById('notes-content');
+    
+    if (!noteTypeToggle || !channelInputContainer || !channelInput) {
+        console.error('便利贴类型切换按钮未找到');
+        return;
+    }
+    
+    // 从本地存储中加载用户的选择
+    isPublicNote = localStorage.getItem('isPublicNote') === 'true';
+    
+    // 初始化UI状态
+    noteTypeToggle.checked = isPublicNote;
+    channelInputContainer.style.visibility = isPublicNote ? 'visible' : 'hidden';
+    
+    // 设置标签样式
+    updateSwitchLabels(isPublicNote);
+    
+    // 加载用户频道设置
+    loadUserChannelSetting();
+    
+    // 是否正在加载中
+    let isLoading = false;
+    
+    // 监听频道输入变化
+    channelInput.addEventListener('change', function() {
+        if (isLoading) return; // 如果正在加载中，不处理新的请求
+        
+        const newChannelId = parseInt(this.value, 10) || 0;
+        
+        // 验证范围
+        if (newChannelId < 0) this.value = 0;
+        if (newChannelId > 9999) this.value = 9999;
+        
+        // 如果频道ID未变，不需要任何操作
+        if (newChannelId === currentChannelId) {
+            return;
+        }
+        
+        // 进入加载状态
+        isLoading = true;
+        channelInput.disabled = true;
+        noteTypeToggle.disabled = true;
+        
+        // 显示加载状态提示
+        showToast('正在切换频道...');
+        
+        // 保存当前内容到当前频道
+        if (notesTextarea && isPublicNote) {
+            const currentContent = notesTextarea.value;
+            localStorage.setItem(`publicNotes_${currentChannelId}`, currentContent);
+            
+            // 先保存当前内容
+            const savePromise = new Promise((resolve) => {
+                saveNotesToServer(currentContent);
+                setTimeout(resolve, 500); // 给服务器一点时间来处理保存请求
+            });
+            
+            savePromise.then(() => {
+                // 更新当前频道ID
+                currentChannelId = newChannelId;
+                
+                // 保存用户频道设置
+                saveUserChannelSetting(currentChannelId);
+                
+                // 从新频道加载内容
+                loadNoteContent().then(() => {
+                    // 加载完成，恢复UI状态
+                    channelInput.disabled = false;
+                    noteTypeToggle.disabled = false;
+                    isLoading = false;
+                    
+                    showToast(`已切换到频道: ${currentChannelId}`);
+                }).catch(error => {
+                    console.error('加载笔记内容失败:', error);
+                    channelInput.disabled = false;
+                    noteTypeToggle.disabled = false;
+                    isLoading = false;
+                    showToast('频道切换失败，请重试', 'error');
+                });
+            });
+        } else {
+            // 不是公共笔记，直接切换
+            currentChannelId = newChannelId;
+            saveUserChannelSetting(currentChannelId);
+            channelInput.disabled = false;
+            noteTypeToggle.disabled = false;
+            isLoading = false;
+            showToast(`已切换到频道: ${currentChannelId}`);
+        }
+    });
+    
+    // 切换便利贴类型
+    noteTypeToggle.addEventListener('change', function() {
+        if (isLoading) {
+            // 如果正在加载中，恢复开关状态并返回
+            this.checked = isPublicNote;
+            return;
+        }
+        
+        const toPublic = this.checked;
+        
+        // 如果状态未改变，不执行任何操作
+        if ((toPublic && isPublicNote) || (!toPublic && !isPublicNote)) {
+            return;
+        }
+        
+        // 设置中间状态
+        isLoading = true;
+        noteTypeToggle.disabled = true;
+        channelInput.disabled = true;
+        
+        // 将开关设置为中间状态（视觉上）
+        updateSwitchToLoadingState();
+        
+        showToast('正在切换便利贴类型...');
+        
+        // 保存当前内容
+        let savePromise;
+        if (notesTextarea) {
+            const currentContent = notesTextarea.value;
+            
+            if (isPublicNote) {
+                // 当前是公共便利贴，需要保存到公共便利贴的存储中
+                localStorage.setItem(`publicNotes_${currentChannelId}`, currentContent);
+                
+                // 保存当前公共便利贴内容
+                savePromise = new Promise((resolve) => {
+                    saveNotesToServer(currentContent);
+                    setTimeout(resolve, 500);
+                });
+            } else {
+                // 当前是个人便利贴，需要保存到个人便利贴的存储中
+                localStorage.setItem('userNotes', currentContent);
+                
+                // 保存当前个人便利贴内容
+                savePromise = new Promise((resolve) => {
+                    saveNotesToServer(currentContent);
+                    setTimeout(resolve, 500);
+                });
+            }
+        } else {
+            savePromise = Promise.resolve();
+        }
+        
+        // 保存完成后再切换
+        savePromise.then(() => {
+            // 切换便利贴类型
+            isPublicNote = toPublic;
+            localStorage.setItem('isPublicNote', isPublicNote.toString());
+            
+            // 加载新的内容
+            return loadNoteContent();
+        })
+        .then(() => {
+            // 更新UI
+            channelInputContainer.style.visibility = isPublicNote ? 'visible' : 'hidden';
+            updateSwitchLabels(isPublicNote);
+            noteTypeToggle.checked = isPublicNote;
+            
+            // 恢复UI状态
+            noteTypeToggle.disabled = false;
+            channelInput.disabled = false;
+            isLoading = false;
+            
+            showToast(isPublicNote ? `切换到公共便利贴 频道:${currentChannelId}` : '切换到个人便利贴');
+        })
+        .catch(error => {
+            console.error('切换便利贴类型失败:', error);
+            // 恢复原始状态
+            noteTypeToggle.checked = isPublicNote;
+            updateSwitchLabels(isPublicNote);
+            noteTypeToggle.disabled = false;
+            channelInput.disabled = false;
+            isLoading = false;
+            showToast('切换便利贴类型失败，请重试', 'error');
+        });
+    });
+    
+    // 加载笔记内容的函数
+    function loadNoteContent() {
+        return new Promise((resolve, reject) => {
+            if (!notesTextarea) {
+                resolve();
+                return;
+            }
+            
+            let apiUrl = isPublicNote
+                ? `/profile/api/public-notes?channel=${currentChannelId}`
+                : '/profile/api/notes';
+                
+            fetch(apiUrl)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else if (response.status === 404) {
+                        return { content: '', last_updated: 0 };
+                    } else {
+                        throw new Error('加载笔记内容失败');
+                    }
+                })
+                .then(data => {
+                    if (notesTextarea) {
+                        notesTextarea.value = data.content || '';
+                    }
+                    
+                    if (isPublicNote) {
+                        localStorage.setItem(`publicNotes_${currentChannelId}`, data.content || '');
+                    } else {
+                        localStorage.setItem('userNotes', data.content || '');
+                    }
+                    
+                    // 更新最后同步时间
+                    lastServerUpdate = data.last_updated || 0;
+                    
+                    // 确保重新开始同步
+                    if (syncInterval) {
+                        clearInterval(syncInterval);
+                    }
+                    startAutoSync(notesTextarea);
+                    
+                    console.log(`从服务器加载${isPublicNote ? '公共' : '个人'}备忘录成功，频道ID：${currentChannelId}`);
+                    resolve();
+                })
+                .catch(error => {
+                    console.error('加载笔记内容失败:', error);
+                    
+                    // 尝试使用本地存储
+                    let savedNotes = '';
+                    
+                    if (isPublicNote) {
+                        savedNotes = localStorage.getItem(`publicNotes_${currentChannelId}`);
+                    } else {
+                        savedNotes = localStorage.getItem('userNotes');
+                    }
+                    
+                    if (notesTextarea) {
+                        notesTextarea.value = savedNotes || '';
+                    }
+                    
+                    // 需要在失败时也继续操作，所以这里用resolve而不是reject
+                    resolve();
+                });
+        });
+    }
+    
+    // 设置开关为加载状态
+    function updateSwitchToLoadingState() {
+        const switchLabels = document.querySelectorAll('.note-type-switch .switch-label');
+        if (switchLabels.length < 2) return;
+        
+        const personalLabel = switchLabels[0];
+        const publicLabel = switchLabels[1];
+        
+        // 清除所有样式类
+        personalLabel.classList.remove('active', 'inactive');
+        publicLabel.classList.remove('active', 'inactive');
+        
+        // 设置加载中样式
+        personalLabel.classList.add('loading');
+        publicLabel.classList.add('loading');
+        
+        // 设置开关滑块在中间的样式（可以通过CSS来控制）
+        const switchSlider = document.querySelector('.note-type-switch .slider');
+        if (switchSlider) {
+            switchSlider.classList.add('loading');
+        }
+        
+        // 2秒后自动恢复，以防加载出错
+        setTimeout(() => {
+            personalLabel.classList.remove('loading');
+            publicLabel.classList.remove('loading');
+            if (switchSlider) {
+                switchSlider.classList.remove('loading');
+            }
+        }, 5000);
+    }
+}
+
+/**
+ * 加载用户频道设置
+ */
+function loadUserChannelSetting() {
+    fetch('/profile/api/channel-setting')
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            } else if (response.status === 404) {
+                return { channel_id: 0 };
+            } else {
+                throw new Error('获取频道设置失败');
+            }
+        })
+        .then(data => {
+            currentChannelId = data.channel_id || 0;
+            const channelInput = document.getElementById('channelInput');
+            if (channelInput) {
+                channelInput.value = currentChannelId;
+            }
+            console.log('加载用户频道设置成功:', currentChannelId);
+        })
+        .catch(error => {
+            console.error('加载用户频道设置失败:', error);
+            // 使用默认值或本地存储的值
+            currentChannelId = parseInt(localStorage.getItem('channelId') || '0');
+            const channelInput = document.getElementById('channelInput');
+            if (channelInput) {
+                channelInput.value = currentChannelId;
+            }
+        });
+}
+
+/**
+ * 保存用户频道设置
+ */
+function saveUserChannelSetting(channelId) {
+    // 保存到本地存储作为备份
+    localStorage.setItem('channelId', channelId);
+    
+    fetch('/profile/api/channel-setting', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ channel_id: channelId }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('保存频道设置失败');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('保存用户频道设置成功');
+    })
+    .catch(error => {
+        console.error('保存用户频道设置失败:', error);
+    });
+}
+
+// 添加处理切换开关标签样式的JS代码
+function updateSwitchLabels(isPublicNote) {
+    // 获取标签元素
+    const switchLabels = document.querySelectorAll('.note-type-switch .switch-label');
+    if (switchLabels.length < 2) return;
+    
+    const personalLabel = switchLabels[0];
+    const publicLabel = switchLabels[1];
+    
+    // 清除所有样式类
+    personalLabel.classList.remove('active', 'inactive', 'loading');
+    publicLabel.classList.remove('active', 'inactive', 'loading');
+    
+    // 清除滑块的加载状态
+    const switchSlider = document.querySelector('.note-type-switch .slider');
+    if (switchSlider) {
+        switchSlider.classList.remove('loading');
+    }
+    
+    // 设置对应样式
+    if (isPublicNote) {
+        personalLabel.classList.remove('active');
+        personalLabel.classList.add('inactive');
+        publicLabel.classList.add('active');
+        publicLabel.classList.remove('inactive');
+    } else {
+        personalLabel.classList.add('active');
+        personalLabel.classList.remove('inactive');
+        publicLabel.classList.remove('active');
+        publicLabel.classList.add('inactive');
+    }
 } 

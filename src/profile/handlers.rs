@@ -12,7 +12,8 @@ use rimplog::{error, info};
 use serde_json::{self, json};
 use std::sync::{Arc, Mutex};
 use tower_cookies::{Cookie, Cookies};
-use crate::db::{get_user_note, save_user_note};
+use crate::db::{get_user_note, save_user_note, get_public_note, save_public_note, 
+               get_user_channel_setting, save_user_channel_setting};
 use std::time::Duration;
 
 type ClientState = Arc<reqwest::Client>;
@@ -907,6 +908,266 @@ pub async fn change_username_api(
             error!("用户名修改失败，状态码: {}, 错误: {}", status, error_msg);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
                 "error": format!("用户名修改失败: {}", error_msg)
+            }))).into_response()
+        }
+    }
+}
+
+// 保存公共便利贴
+pub async fn save_public_notes_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let _user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从请求体中获取备忘录内容和频道ID
+    let content = match payload.get("content") {
+        Some(content) => match content.as_str() {
+            Some(text) => text,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "备忘录内容必须是字符串"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含备忘录内容"
+            }))).into_response();
+        }
+    };
+    
+    let channel_id = match payload.get("channel_id") {
+        Some(id) => match id.as_u64() {
+            Some(num) => num as u32,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "频道ID必须是整数"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含频道ID"
+            }))).into_response();
+        }
+    };
+
+    // 获取当前时间戳，将用于返回给客户端
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // 保存公共备忘录到数据库
+    match save_public_note(channel_id, content) {
+        Ok(_) => {
+            // info!("用户 {} 保存了频道 {} 的公共备忘录", user_id, channel_id);
+            
+            // 返回成功状态和最后更新时间
+            (StatusCode::OK, Json(json!({
+                "status": "success",
+                "message": "公共备忘录已保存",
+                "last_updated": now
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("保存公共备忘录失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "保存公共备忘录失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 获取公共便利贴
+pub async fn get_public_notes_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let _user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+    
+    // 获取频道参数
+    let channel_id_str = match params.get("channel") {
+        Some(channel) => channel,
+        None => "0", // 默认频道
+    };
+    
+    let channel_id = match channel_id_str.parse::<u32>() {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "无效的频道ID"
+            }))).into_response();
+        }
+    };
+
+    // 从数据库获取公共备忘录
+    match get_public_note(channel_id) {
+        Ok(Some(note)) => {
+            (StatusCode::OK, Json(json!({
+                "content": note.content,
+                "last_updated": note.last_updated
+            }))).into_response()
+        },
+        Ok(None) => {
+            // 如果没有备忘录
+            (StatusCode::NOT_FOUND, Json(json!({
+                "error": "未找到公共备忘录"
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("获取公共备忘录失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "获取公共备忘录失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 保存用户频道设置
+pub async fn save_user_channel_setting_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从请求体中获取频道ID
+    let channel_id = match payload.get("channel_id") {
+        Some(id) => match id.as_u64() {
+            Some(num) => num as u32,
+            None => {
+                return (StatusCode::BAD_REQUEST, Json(json!({
+                    "error": "频道ID必须是整数"
+                }))).into_response();
+            }
+        },
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "请求中未包含频道ID"
+            }))).into_response();
+        }
+    };
+
+    // 保存用户频道设置到数据库
+    match save_user_channel_setting(&user_id, channel_id) {
+        Ok(_) => {
+            // 返回成功状态
+            (StatusCode::OK, Json(json!({
+                "status": "success",
+                "message": "频道设置已保存"
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("保存频道设置失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "保存频道设置失败"
+            }))).into_response()
+        }
+    }
+}
+
+// 获取用户频道设置
+pub async fn get_user_channel_setting_api(
+    cookies: Cookies,
+    Extension(client): Extension<ClientState>,
+) -> impl IntoResponse {
+    // 检查是否已登录
+    let access_token = match cookies.get("access_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "未登录或会话已过期"
+            }))).into_response();
+        }
+    };
+
+    // 获取用户信息
+    let user_id = match utils::get_user_id_from_token(&client, &access_token).await {
+        Ok(id) => id,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "获取用户ID失败"
+            }))).into_response();
+        }
+    };
+
+    // 从数据库获取用户频道设置
+    match get_user_channel_setting(&user_id) {
+        Ok(Some(setting)) => {
+            (StatusCode::OK, Json(json!({
+                "channel_id": setting.channel_id,
+                "last_updated": setting.last_updated
+            }))).into_response()
+        },
+        Ok(None) => {
+            // 如果用户没有频道设置，返回默认值
+            (StatusCode::OK, Json(json!({
+                "channel_id": 0,
+                "last_updated": 0
+            }))).into_response()
+        },
+        Err(e) => {
+            error!("获取用户频道设置失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                "error": "获取用户频道设置失败"
             }))).into_response()
         }
     }
