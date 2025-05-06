@@ -96,7 +96,7 @@ pub async fn get_user_info(
                         }
                     };
                     
-                    info!("用户信息原始响应: {}", response_text);
+                    // info!("用户信息原始响应: {}", response_text);
                     
                     match serde_json::from_str::<User>(&response_text) {
                         Ok(user) => return Ok(user),

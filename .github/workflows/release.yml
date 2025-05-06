@@ -17,63 +17,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 创建Docker构建环境
+      - name: 安装Rust工具链
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          override: true
+
+      - name: 安装依赖
         run: |
-          cat > Dockerfile.build << EOF
-          FROM rust:latest
-
-          # 安装必要的依赖
-          RUN apt-get update && apt-get install -y \
-              musl-tools \
-              musl-dev \
-              pkg-config \
-              libssl-dev \
-              build-essential \
-              wget \
-              git \
-              && rm -rf /var/lib/apt/lists/*
-
-          # 添加musl目标
-          RUN rustup target add x86_64-unknown-linux-musl
-
-          # 创建Cargo配置
-          RUN mkdir -p /root/.cargo && \
-              echo '[profile.release]' > /root/.cargo/config && \
-              echo 'lto = true' >> /root/.cargo/config && \
-              echo 'opt-level = "z"' >> /root/.cargo/config && \
-              echo 'codegen-units = 1' >> /root/.cargo/config && \
-              echo 'panic = "abort"' >> /root/.cargo/config
-
-          # 环境变量设置
-          ENV OPENSSL_STATIC=1
-          ENV OPENSSL_DIR=/usr
-          ENV RUSTFLAGS="-C target-feature=+crt-static"
-
-          WORKDIR /app
-          CMD ["/bin/bash"]
-          EOF
-
-      - name: 构建Docker镜像
-        run: docker build -t rust-musl-builder -f Dockerfile.build .
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
 
       - name: 构建应用
         run: |
-          docker run --rm -v $(pwd):/app rust-musl-builder /bin/bash -c '
-            cd /app &&
-            # 显示依赖树以验证冲突是否解决
-            cargo tree | grep openssl || echo "未找到OpenSSL依赖" &&
-            # 构建应用
-            RUSTFLAGS="-C target-feature=+crt-static" \
-            cargo build --release --target x86_64-unknown-linux-musl
-          '
+          # 设置release配置
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config << EOF
+          [profile.release]
+          lto = true
+          opt-level = "z"
+          codegen-units = 1
+          panic = "abort"
+          EOF
+          
+          # 显示依赖树
+          cargo tree
+          
+          # 构建应用
+          cargo build --release
 
       - name: 准备发布文件
         run: |
           mkdir -p release
           
-          # 查找并复制编译产物
-          if [ -f "target/x86_64-unknown-linux-musl/release/lycrex-home" ]; then
-            cp target/x86_64-unknown-linux-musl/release/lycrex-home release/
+          # 复制编译产物
+          if [ -f "target/release/lycrex-home" ]; then
+            cp target/release/lycrex-home release/
             echo "成功找到编译产物"
           else
             echo "在标准位置未找到编译产物，尝试查找其他位置..."
@@ -143,4 +124,106 @@ jobs:
           files: |
             release/lycrex-home-linux-x86_64.tar.gz
           body: |
-            ${{ steps.get_commits.outputs.COMMITS }} 
+            ${{ steps.get_commits.outputs.COMMITS }}
+            
+  deploy:
+    name: 部署到服务器
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    environment: server-hk0
+    steps:
+      - name: 下载发布的压缩包
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const release = await github.rest.repos.getLatestRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            
+            for (const asset of release.data.assets) {
+              if (asset.name === 'lycrex-home-linux-x86_64.tar.gz') {
+                const response = await github.request(asset.browser_download_url, {
+                  headers: {
+                    'Accept': 'application/octet-stream'
+                  },
+                  request: {
+                    raw: true
+                  }
+                });
+                
+                fs.writeFileSync('lycrex-home-linux-x86_64.tar.gz', Buffer.from(response.data));
+                console.log('下载完成: lycrex-home-linux-x86_64.tar.gz');
+                break;
+              }
+            }
+            
+      - name: 解压文件
+        run: |
+          mkdir -p deploy
+          tar -xzf lycrex-home-linux-x86_64.tar.gz -C deploy
+          chmod +x deploy/lycrex-home
+          
+      - name: 创建systemd服务文件
+        run: |
+          cat > deploy/lycrex-home.service << EOF
+          [Unit]
+          Description=Lycrex Home Service
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/lycrex-home
+          ExecStart=/opt/lycrex-home/lycrex-home
+          Restart=on-failure
+          RestartSec=5
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+      
+      - name: 部署到服务器
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ vars.SERVER_PORT }}
+          source: "deploy/*"
+          target: "/tmp/lycrex-deploy"
+          
+      - name: 安装和重启服务
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ vars.SERVER_PORT }}
+          script: |
+            # 创建安装目录
+            sudo mkdir -p /opt/lycrex-home
+            
+            # 复制二进制文件
+            sudo cp /tmp/lycrex-deploy/deploy/lycrex-home /opt/lycrex-home/
+            
+            # 复制和启用systemd服务
+            sudo cp /tmp/lycrex-deploy/deploy/lycrex-home.service /etc/systemd/system/
+            sudo systemctl daemon-reload
+            
+            # 启动或重启服务
+            if sudo systemctl is-active --quiet lycrex-home; then
+              echo "重启服务..."
+              sudo systemctl restart lycrex-home
+            else
+              echo "启用并启动服务..."
+              sudo systemctl enable lycrex-home
+              sudo systemctl start lycrex-home
+            fi
+            
+            # 检查服务状态
+            sudo systemctl status lycrex-home
+            
+            # 清理临时文件
+            rm -rf /tmp/lycrex-deploy 

@@ -24,6 +24,7 @@ static DB_CONN: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
 // 用户备忘录结构体
 #[derive(Debug, Clone)]
 pub struct UserNote {
+    #[allow(dead_code)]
     pub user_id: String,
     pub content: String,
     pub last_updated: u64,

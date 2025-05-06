@@ -1,0 +1,146 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 创建Docker构建环境
+        run: |
+          cat > Dockerfile.build << EOF
+          FROM rust:latest
+
+          # 安装必要的依赖
+          RUN apt-get update && apt-get install -y \
+              musl-tools \
+              musl-dev \
+              pkg-config \
+              libssl-dev \
+              build-essential \
+              wget \
+              git \
+              && rm -rf /var/lib/apt/lists/*
+
+          # 添加musl目标
+          RUN rustup target add x86_64-unknown-linux-musl
+
+          # 创建Cargo配置
+          RUN mkdir -p /root/.cargo && \
+              echo '[profile.release]' > /root/.cargo/config && \
+              echo 'lto = true' >> /root/.cargo/config && \
+              echo 'opt-level = "z"' >> /root/.cargo/config && \
+              echo 'codegen-units = 1' >> /root/.cargo/config && \
+              echo 'panic = "abort"' >> /root/.cargo/config
+
+          # 环境变量设置
+          ENV OPENSSL_STATIC=1
+          ENV OPENSSL_DIR=/usr
+          ENV RUSTFLAGS="-C target-feature=+crt-static"
+
+          WORKDIR /app
+          CMD ["/bin/bash"]
+          EOF
+
+      - name: 构建Docker镜像
+        run: docker build -t rust-musl-builder -f Dockerfile.build .
+
+      - name: 构建应用
+        run: |
+          docker run --rm -v $(pwd):/app rust-musl-builder /bin/bash -c '
+            cd /app &&
+            # 显示依赖树以验证冲突是否解决
+            cargo tree | grep openssl || echo "未找到OpenSSL依赖" &&
+            # 构建应用
+            RUSTFLAGS="-C target-feature=+crt-static" \
+            cargo build --release --target x86_64-unknown-linux-musl
+          '
+
+      - name: 准备发布文件
+        run: |
+          mkdir -p release
+          
+          # 查找并复制编译产物
+          if [ -f "target/x86_64-unknown-linux-musl/release/lycrex-home" ]; then
+            cp target/x86_64-unknown-linux-musl/release/lycrex-home release/
+            echo "成功找到编译产物"
+          else
+            echo "在标准位置未找到编译产物，尝试查找其他位置..."
+            BINARY=$(find target -name "lycrex-home" -type f -executable | head -n 1)
+            if [ -n "$BINARY" ]; then
+              cp "$BINARY" release/
+              echo "找到编译产物: $BINARY"
+            else
+              echo "无法找到lycrex-home可执行文件，构建可能失败"
+              exit 1
+            fi
+          fi
+          
+          # 创建压缩包
+          cd release && tar -czf lycrex-home-linux-x86_64.tar.gz lycrex-home
+          cd ..
+
+      - name: 获取版本信息
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: 获取提交信息
+        id: get_commits
+        run: |
+          # 确保获取完整的标签和历史
+          git fetch --prune --unshallow --tags
+          
+          # 获取当前标签
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          
+          # 获取所有标签并按版本排序
+          ALL_TAGS=$(git tag -l --sort=-v:refname)
+          
+          # 查找当前标签之前的标签
+          PREVIOUS_TAG=""
+          FOUND_CURRENT=false
+          for tag in $ALL_TAGS; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              PREVIOUS_TAG=$tag
+              break
+            fi
+            if [ "$tag" = "$CURRENT_TAG" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+          
+          echo "当前标签: $CURRENT_TAG, 上一个标签: $PREVIOUS_TAG"
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # 如果没有之前的标签，获取所有提交
+            COMMITS=$(git log --pretty=format:"* %s (%h)" $CURRENT_TAG)
+          else
+            # 获取从上一个标签到当前标签的所有提交
+            COMMITS=$(git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..$CURRENT_TAG)
+          fi
+          echo "COMMITS<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 创建发布
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            release/lycrex-home-linux-x86_64.tar.gz
+          body: |
+            ${{ steps.get_commits.outputs.COMMITS }} 

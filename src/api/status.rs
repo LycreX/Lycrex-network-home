@@ -124,7 +124,7 @@ pub async fn get_status() -> StatusResponse {
     let memory = sys.used_memory();
     let total_memory = sys.total_memory();
     let free_memory = sys.free_memory();
-    let cpu_usage = sys.global_cpu_info().cpu_usage();
+    let cpu_usage = sys.global_cpu_usage();
     
     // 获取当前时间戳
     let timestamp = SystemTime::now()

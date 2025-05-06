@@ -93,7 +93,7 @@ fn create_router() -> Router {
     // 创建路由
     Router::new()
         .route("/", get(handler))
-        .route("/static/*path", get(static_files::serve_static_file))
+        .route("/static/{*path}", get(static_files::serve_static_file))
         .nest("/api", api::api_routes())
 
         // Profile模块路由 - 按照原始结构嵌套
