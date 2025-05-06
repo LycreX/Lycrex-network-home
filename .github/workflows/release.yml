@@ -137,28 +137,48 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const release = await github.rest.repos.getLatestRelease({
+            const core = require('@actions/core');
+            
+            // 获取当前标签版本（从GITHUB_REF环境变量）
+            const tagVersion = process.env.GITHUB_REF.replace('refs/tags/', '');
+            console.log(`当前标签版本: ${tagVersion}`);
+            
+            // 直接通过标签获取发布
+            const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
-              repo: context.repo.repo
+              repo: context.repo.repo,
+              tag: tagVersion
             });
             
+            console.log(`找到发布版本: ${release.data.tag_name}, ID: ${release.data.id}`);
+            
+            let assetFound = false;
             for (const asset of release.data.assets) {
               if (asset.name === 'lycrex-home-linux-x86_64.tar.gz') {
-                const response = await github.request(asset.browser_download_url, {
+                console.log(`找到资产: ${asset.name}, ID: ${asset.id}`);
+                assetFound = true;
+                
+                // 使用GitHub API获取资产内容
+                const assetResponse = await github.rest.repos.getReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id,
                   headers: {
-                    'Accept': 'application/octet-stream'
-                  },
-                  request: {
-                    raw: true
+                    accept: 'application/octet-stream'
                   }
                 });
                 
-                fs.writeFileSync('lycrex-home-linux-x86_64.tar.gz', Buffer.from(response.data));
+                // 将响应数据写入文件
+                fs.writeFileSync('lycrex-home-linux-x86_64.tar.gz', Buffer.from(assetResponse.data));
                 console.log('下载完成: lycrex-home-linux-x86_64.tar.gz');
                 break;
               }
             }
             
+            if (!assetFound) {
+              core.setFailed(`在发布 ${tagVersion} 中未找到资产: lycrex-home-linux-x86_64.tar.gz`);
+            }
+
       - name: 解压文件
         run: |
           mkdir -p deploy
