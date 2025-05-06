@@ -2,6 +2,9 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'
 
@@ -13,6 +16,7 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,7 +78,7 @@ jobs:
 
       - name: 获取版本信息
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: 获取提交信息
         id: get_commits
@@ -110,60 +114,80 @@ jobs:
             # 获取从上一个标签到当前标签的所有提交
             COMMITS=$(git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..$CURRENT_TAG)
           fi
-          echo "COMMITS<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "COMMITS<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: 创建发布
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
-          name: Release ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ env.VERSION }}
           draft: false
           prerelease: false
           files: |
             release/lycrex-home-linux-x86_64.tar.gz
           body: |
-            ${{ steps.get_commits.outputs.COMMITS }}
+            ${{ env.COMMITS }}
             
   deploy:
     name: 部署到服务器
-    needs: build-and-release
     runs-on: ubuntu-latest
     environment: server-hk0
     steps:
-      - name: 下载发布的压缩包
-        uses: actions/github-script@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 安装Rust工具链
+        uses: actions-rs/toolchain@v1
         with:
-          script: |
-            const fs = require('fs');
-            const release = await github.rest.repos.getLatestRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            
-            for (const asset of release.data.assets) {
-              if (asset.name === 'lycrex-home-linux-x86_64.tar.gz') {
-                const response = await github.request(asset.browser_download_url, {
-                  headers: {
-                    'Accept': 'application/octet-stream'
-                  },
-                  request: {
-                    raw: true
-                  }
-                });
-                
-                fs.writeFileSync('lycrex-home-linux-x86_64.tar.gz', Buffer.from(response.data));
-                console.log('下载完成: lycrex-home-linux-x86_64.tar.gz');
-                break;
-              }
-            }
-            
-      - name: 解压文件
+          profile: minimal
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          override: true
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+
+      - name: 构建应用
+        run: |
+          # 设置release配置
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config << EOF
+          [profile.release]
+          lto = true
+          opt-level = "z"
+          codegen-units = 1
+          panic = "abort"
+          EOF
+          
+          # 显示依赖树
+          cargo tree
+          
+          # 构建应用
+          cargo build --release
+
+      - name: 准备部署文件
         run: |
           mkdir -p deploy
-          tar -xzf lycrex-home-linux-x86_64.tar.gz -C deploy
-          chmod +x deploy/lycrex-home
+          
+          # 复制编译产物
+          if [ -f "target/release/lycrex-home" ]; then
+            cp target/release/lycrex-home deploy/
+            echo "成功找到编译产物"
+          else
+            echo "在标准位置未找到编译产物，尝试查找其他位置..."
+            BINARY=$(find target -name "lycrex-home" -type f -executable | head -n 1)
+            if [ -n "$BINARY" ]; then
+              cp "$BINARY" deploy/
+              echo "找到编译产物: $BINARY"
+            else
+              echo "无法找到lycrex-home可执行文件，构建可能失败"
+              exit 1
+            fi
+          fi
           
       - name: 创建systemd服务文件
         run: |
