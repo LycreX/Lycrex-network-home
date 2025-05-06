@@ -32,7 +32,7 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config
+          sudo apt-get install -y build-essential pkg-config musl-tools
 
       - name: 构建应用
         run: |
@@ -46,22 +46,25 @@ jobs:
           panic = "abort"
           EOF
           
+          # 使用MUSL目标进行静态链接（不依赖GLIBC）
+          rustup target add x86_64-unknown-linux-musl
+          
           # 显示依赖树
           cargo tree
           
-          # 构建应用
-          cargo build --release
+          # 构建应用 - 使用musl静态链接
+          cargo build --release --target x86_64-unknown-linux-musl
 
       - name: 准备发布文件
         run: |
           mkdir -p release
           
           # 复制编译产物
-          if [ -f "target/release/lycrex-home" ]; then
-            cp target/release/lycrex-home release/
+          if [ -f "target/x86_64-unknown-linux-musl/release/lycrex-home" ]; then
+            cp target/x86_64-unknown-linux-musl/release/lycrex-home release/
             echo "成功找到编译产物"
           else
-            echo "在标准位置未找到编译产物，尝试查找其他位置..."
+            echo "在musl目标位置未找到编译产物，尝试查找其他位置..."
             BINARY=$(find target -name "lycrex-home" -type f -executable | head -n 1)
             if [ -n "$BINARY" ]; then
               cp "$BINARY" release/
@@ -149,7 +152,7 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config
+          sudo apt-get install -y build-essential pkg-config musl-tools
 
       - name: 构建应用
         run: |
@@ -163,22 +166,25 @@ jobs:
           panic = "abort"
           EOF
           
+          # 使用MUSL目标进行静态链接（不依赖GLIBC）
+          rustup target add x86_64-unknown-linux-musl
+          
           # 显示依赖树
           cargo tree
           
-          # 构建应用
-          cargo build --release
+          # 构建应用 - 使用musl静态链接
+          cargo build --release --target x86_64-unknown-linux-musl
 
       - name: 准备部署文件
         run: |
           mkdir -p deploy
           
           # 复制编译产物
-          if [ -f "target/release/lycrex-home" ]; then
-            cp target/release/lycrex-home deploy/
+          if [ -f "target/x86_64-unknown-linux-musl/release/lycrex-home" ]; then
+            cp target/x86_64-unknown-linux-musl/release/lycrex-home deploy/
             echo "成功找到编译产物"
           else
-            echo "在标准位置未找到编译产物，尝试查找其他位置..."
+            echo "在musl目标位置未找到编译产物，尝试查找其他位置..."
             BINARY=$(find target -name "lycrex-home" -type f -executable | head -n 1)
             if [ -n "$BINARY" ]; then
               cp "$BINARY" deploy/
