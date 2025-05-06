@@ -33,6 +33,7 @@ pub struct UserNote {
 // 公共便利贴结构体
 #[derive(Debug, Clone)]
 pub struct PublicNote {
+    #[allow(dead_code)]
     pub channel_id: u32,
     pub content: String,
     pub last_updated: u64,
@@ -41,6 +42,7 @@ pub struct PublicNote {
 // 用户频道设置结构体
 #[derive(Debug, Clone)]
 pub struct UserChannelSetting {
+    #[allow(dead_code)]
     pub user_id: String,
     pub channel_id: u32,
     pub last_updated: u64,

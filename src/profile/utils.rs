@@ -1,8 +1,5 @@
-use crate::config::OAuthConfig;
 use super::models::{TokenResponse, User};
-use rimplog::{error, info};
 use serde_json;
-use std::time::Duration;
 use crate::config::get_oauth_config;
 use reqwest::Client;
 use serde_json::json;

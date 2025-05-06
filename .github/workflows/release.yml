@@ -234,6 +234,9 @@ jobs:
           script: |
             # 创建安装目录
             sudo mkdir -p /opt/lycrex-home
+
+            # 先停止服务
+            sudo systemctl stop lycrex-home
             
             # 复制二进制文件
             sudo cp /tmp/lycrex-deploy/deploy/lycrex-home /opt/lycrex-home/
